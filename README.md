@@ -216,13 +216,6 @@ spec:
   # Node roles to scan (node-level profiles only)
   roles:
     - worker
-    - master
-
-  # Tolerations for scanner pods on master nodes
-  scanTolerations:
-    - effect: NoSchedule
-      key: node-role.kubernetes.io/master
-      operator: Exists
 
   # Storage for raw ARF results
   rawResultStorage:
@@ -230,10 +223,6 @@ spec:
       - ReadWriteOnce
     size: 2Gi
     rotation: 3
-    tolerations:
-      - effect: NoSchedule
-        key: node-role.kubernetes.io/master
-        operator: Exists
 
   # Auto-apply eligible remediations (use with caution)
   # autoApplyRemediations: false
@@ -457,9 +446,7 @@ spec:
     maxBackups: 5           # Number of AIDE database backups to retain
 ```
 
-The policies in this repo create two `FileIntegrity` CRs:
-- **`worker-fileintegrity`** -- monitors all worker nodes
-- **`master-fileintegrity`** -- monitors master/control-plane nodes (with tolerations for scheduling on masters)
+The policies in this repo create a `FileIntegrity` CR for worker nodes (`worker-fileintegrity`), which covers all nodes in the fleet since both the ROSA HCP hub and bare metal managed clusters have worker-only topologies.
 
 ### Custom AIDE Configuration
 
@@ -538,7 +525,7 @@ This repo assumes the following topology:
 │  ├── Policy resources (this repo)    │
 │  ├── Compliance Operator  ◄── policy │
 │  └── File Integrity Operator ◄─ policy│
-│      (worker nodes only, no masters) │
+│      (worker nodes only)             │
 └──────────────┬───────────────────────┘
                │ ACM Governance
     ┌──────────┴──────────┐
@@ -547,12 +534,13 @@ This repo assumes the following topology:
 │ Managed       │  │ Managed       │
 │ Cluster       │  │ Cluster       │
 │ (Bare Metal)  │  │ (Bare Metal)  │
-│ master+worker │  │ master+worker │
+│ worker nodes  │  │ worker nodes  │
 └──────────────┘  └──────────────┘
 ```
 
-- **Hub cluster (ROSA HCP)**: Runs RHACM and is also a target for the policies via `local-cluster`. The Compliance Operator and FIO are deployed on the hub itself. Since ROSA HCP has no schedulable master nodes, the `master` role in ScanSettings and the `master-fileintegrity` CR simply find no matching nodes and are skipped gracefully -- no errors, just no master scan results on the hub.
-- **Managed clusters (bare metal)**: Full master + worker scanning. Both node roles are scanned by the Compliance Operator and monitored by FIO.
+- **Hub cluster (ROSA HCP)**: Runs RHACM and is also a target for the policies via `local-cluster`. The Compliance Operator and FIO are deployed on the hub itself.
+- **Managed clusters (bare metal)**: Worker-node-only clusters. Compliance scans and file integrity monitoring run on all worker nodes.
+- **All clusters** have worker nodes only (no schedulable masters), so scan settings and FIO target the `worker` role exclusively.
 
 The Placement targets all clusters labeled `vendor: OpenShift`, which includes `local-cluster` (the hub) automatically.
 

@@ -44,32 +44,6 @@ spec:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
         metadata:
-          name: fio-master-fileintegrity
-        spec:
-          remediationAction: enforce
-          severity: high
-          object-templates:
-            - complianceType: musthave
-              objectDefinition:
-                apiVersion: fileintegrity.openshift.io/v1alpha1
-                kind: FileIntegrity
-                metadata:
-                  name: master-fileintegrity
-                  namespace: openshift-file-integrity
-                spec:
-                  nodeSelector:
-                    node-role.kubernetes.io/master: ""
-                  tolerations:
-                    - effect: NoSchedule
-                      key: node-role.kubernetes.io/master
-                      operator: Exists
-                  config:
-                    gracePeriod: 900
-                    maxBackups: 5
-    - objectDefinition:
-        apiVersion: policy.open-cluster-management.io/v1
-        kind: ConfigurationPolicy
-        metadata:
           name: fio-custom-aide-config
         spec:
           remediationAction: enforce
