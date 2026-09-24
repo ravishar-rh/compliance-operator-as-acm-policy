@@ -1,0 +1,18 @@
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: placement-compliance-operator
+  namespace: compliance-operator-policies
+spec:
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchExpressions:
+            - key: vendor
+              operator: In
+              values:
+                - OpenShift
+  tolerations:
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists

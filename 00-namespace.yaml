@@ -1,0 +1,7 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: compliance-operator-policies
+  labels:
+    app: compliance-operator-policy

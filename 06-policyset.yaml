@@ -1,0 +1,33 @@
+---
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: PolicySet
+metadata:
+  name: compliance-operator-policyset
+  namespace: compliance-operator-policies
+spec:
+  description: >-
+    Deploys the Compliance Operator and File Integrity Operator,
+    configures CIS and SOC 2 benchmark scans with runtime file
+    integrity monitoring on all managed OpenShift clusters.
+  policies:
+    - policy-install-compliance-operator
+    - policy-cis-compliance-scan
+    - policy-soc2-compliance-scan
+    - policy-check-compliance-results
+    - policy-install-file-integrity-operator
+    - policy-configure-file-integrity
+    - policy-check-file-integrity-results
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-compliance-policyset
+  namespace: compliance-operator-policies
+placementRef:
+  name: placement-compliance-operator
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: compliance-operator-policyset
+    apiGroup: policy.open-cluster-management.io
+    kind: PolicySet

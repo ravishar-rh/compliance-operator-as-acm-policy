@@ -1,0 +1,119 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: policy-configure-file-integrity
+  namespace: compliance-operator-policies
+  annotations:
+    policy.open-cluster-management.io/standards: NIST SP 800-53
+    policy.open-cluster-management.io/categories: SI System and Information Integrity
+    policy.open-cluster-management.io/controls: SI-7 Software Firmware and Information Integrity
+spec:
+  disabled: false
+  remediationAction: enforce
+  dependencies:
+    - apiVersion: policy.open-cluster-management.io/v1
+      compliance: Compliant
+      kind: Policy
+      name: policy-install-file-integrity-operator
+      namespace: compliance-operator-policies
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: fio-worker-fileintegrity
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: fileintegrity.openshift.io/v1alpha1
+                kind: FileIntegrity
+                metadata:
+                  name: worker-fileintegrity
+                  namespace: openshift-file-integrity
+                spec:
+                  nodeSelector:
+                    node-role.kubernetes.io/worker: ""
+                  config:
+                    gracePeriod: 900
+                    maxBackups: 5
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: fio-master-fileintegrity
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: fileintegrity.openshift.io/v1alpha1
+                kind: FileIntegrity
+                metadata:
+                  name: master-fileintegrity
+                  namespace: openshift-file-integrity
+                spec:
+                  nodeSelector:
+                    node-role.kubernetes.io/master: ""
+                  tolerations:
+                    - effect: NoSchedule
+                      key: node-role.kubernetes.io/master
+                      operator: Exists
+                  config:
+                    gracePeriod: 900
+                    maxBackups: 5
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: fio-custom-aide-config
+        spec:
+          remediationAction: enforce
+          severity: medium
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: aide-conf
+                  namespace: openshift-file-integrity
+                data:
+                  aide.conf: |
+                    @@define DBDIR /hostroot/etc/kubernetes
+                    @@define LOGDIR /hostroot/etc/kubernetes
+                    database=file:@@{DBDIR}/aide.db.gz
+                    database_out=file:@@{DBDIR}/aide.db.new.gz
+                    gzip_dbout=yes
+                    verbose=5
+                    report_url=file:@@{LOGDIR}/aide.log
+                    report_url=stdout
+
+                    # Critical system binaries
+                    /hostroot/bin    p+i+n+u+g+s+b+acl+xattrs+sha512
+                    /hostroot/sbin   p+i+n+u+g+s+b+acl+xattrs+sha512
+                    /hostroot/usr/bin   p+i+n+u+g+s+b+acl+xattrs+sha512
+                    /hostroot/usr/sbin  p+i+n+u+g+s+b+acl+xattrs+sha512
+
+                    # Kubernetes and OpenShift configuration
+                    /hostroot/etc/kubernetes   p+i+n+u+g+s+b+acl+xattrs+sha512
+                    /hostroot/etc/cni   p+i+n+u+g+s+b+acl+xattrs+sha512
+
+                    # SSH configuration
+                    /hostroot/etc/ssh/sshd_config   p+i+n+u+g+s+b+acl+xattrs+sha512
+                    /hostroot/etc/ssh/ssh_config     p+i+n+u+g+s+b+acl+xattrs+sha512
+
+                    # Critical system configuration
+                    /hostroot/etc/passwd   p+i+n+u+g+s+b+acl+xattrs+sha512
+                    /hostroot/etc/shadow   p+i+n+u+g+s+b+acl+xattrs+sha512
+                    /hostroot/etc/group    p+i+n+u+g+s+b+acl+xattrs+sha512
+                    /hostroot/etc/gshadow  p+i+n+u+g+s+b+acl+xattrs+sha512
+                    /hostroot/etc/sudoers  p+i+n+u+g+s+b+acl+xattrs+sha512
+                    /hostroot/etc/sudoers.d  p+i+n+u+g+s+b+acl+xattrs+sha512
+
+                    # Systemd units
+                    /hostroot/etc/systemd   p+i+n+u+g+s+b+acl+xattrs+sha512

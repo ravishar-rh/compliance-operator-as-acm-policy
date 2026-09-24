@@ -1,0 +1,16 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - 00-namespace.yaml
+  - 01-policy-install-compliance-operator.yaml
+  - 02-policy-cis-scan.yaml
+  - 03-policy-check-compliance-results.yaml
+  - 04-placement.yaml
+  - 05-placementbindings.yaml
+  - 06-policyset.yaml
+  - 07-policy-soc2-scan.yaml
+  - 08-policy-install-file-integrity-operator.yaml
+  - 09-policy-configure-file-integrity.yaml
+  - 10-policy-check-file-integrity-results.yaml

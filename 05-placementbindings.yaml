@@ -1,0 +1,98 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-install-compliance-operator
+  namespace: compliance-operator-policies
+placementRef:
+  name: placement-compliance-operator
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-install-compliance-operator
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-cis-compliance-scan
+  namespace: compliance-operator-policies
+placementRef:
+  name: placement-compliance-operator
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-cis-compliance-scan
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-check-compliance-results
+  namespace: compliance-operator-policies
+placementRef:
+  name: placement-compliance-operator
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-check-compliance-results
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-soc2-compliance-scan
+  namespace: compliance-operator-policies
+placementRef:
+  name: placement-compliance-operator
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-soc2-compliance-scan
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-install-file-integrity-operator
+  namespace: compliance-operator-policies
+placementRef:
+  name: placement-compliance-operator
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-install-file-integrity-operator
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-configure-file-integrity
+  namespace: compliance-operator-policies
+placementRef:
+  name: placement-compliance-operator
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-configure-file-integrity
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-check-file-integrity-results
+  namespace: compliance-operator-policies
+placementRef:
+  name: placement-compliance-operator
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-check-file-integrity-results
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy

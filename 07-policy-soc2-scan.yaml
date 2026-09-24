@@ -1,0 +1,103 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: policy-soc2-compliance-scan
+  namespace: compliance-operator-policies
+  annotations:
+    policy.open-cluster-management.io/standards: SOC 2
+    policy.open-cluster-management.io/categories: "Security, Availability"
+    policy.open-cluster-management.io/controls: >-
+      CC6.1 Logical and Physical Access Controls,
+      CC7.2 System Monitoring,
+      CC8.1 Change Management
+spec:
+  disabled: false
+  remediationAction: enforce
+  dependencies:
+    - apiVersion: policy.open-cluster-management.io/v1
+      compliance: Compliant
+      kind: Policy
+      name: policy-install-compliance-operator
+      namespace: compliance-operator-policies
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: soc2-scan-setting
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: compliance.openshift.io/v1alpha1
+                kind: ScanSetting
+                metadata:
+                  name: soc2-scan-setting
+                  namespace: openshift-compliance
+                spec:
+                  schedule: "0 2 * * *"
+                  rotation: 5
+                  roles:
+                    - worker
+                    - master
+                  scanTolerations:
+                    - effect: NoSchedule
+                      key: node-role.kubernetes.io/master
+                      operator: Exists
+                  rawResultStorage:
+                    pvAccessModes:
+                      - ReadWriteOnce
+                    size: 2Gi
+                    tolerations:
+                      - effect: NoSchedule
+                        key: node-role.kubernetes.io/master
+                        operator: Exists
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: soc2-scan-binding
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: compliance.openshift.io/v1alpha1
+                kind: ScanSettingBinding
+                metadata:
+                  name: soc2-compliance
+                  namespace: openshift-compliance
+                spec:
+                  settingsRef:
+                    name: soc2-scan-setting
+                    kind: ScanSetting
+                    apiGroup: compliance.openshift.io/v1alpha1
+                  profiles:
+                    - name: ocp4-moderate
+                      kind: Profile
+                      apiGroup: compliance.openshift.io/v1alpha1
+                    - name: ocp4-moderate-node
+                      kind: Profile
+                      apiGroup: compliance.openshift.io/v1alpha1
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: soc2-suite-status
+        spec:
+          remediationAction: inform
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: compliance.openshift.io/v1alpha1
+                kind: ComplianceSuite
+                metadata:
+                  name: soc2-compliance
+                  namespace: openshift-compliance
+                status:
+                  phase: DONE

@@ -1,0 +1,74 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: policy-cis-compliance-scan
+  namespace: compliance-operator-policies
+  annotations:
+    policy.open-cluster-management.io/standards: NIST SP 800-53
+    policy.open-cluster-management.io/categories: CM Configuration Management
+    policy.open-cluster-management.io/controls: CM-6 Configuration Settings
+spec:
+  disabled: false
+  remediationAction: enforce
+  dependencies:
+    - apiVersion: policy.open-cluster-management.io/v1
+      compliance: Compliant
+      kind: Policy
+      name: policy-install-compliance-operator
+      namespace: compliance-operator-policies
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: cis-scan-setting
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: compliance.openshift.io/v1alpha1
+                kind: ScanSetting
+                metadata:
+                  name: cis-scan-setting
+                  namespace: openshift-compliance
+                spec:
+                  schedule: "0 1 * * *"
+                  rotation: 3
+                  roles:
+                    - worker
+                    - master
+                  scanTolerations:
+                    - effect: NoSchedule
+                      key: node-role.kubernetes.io/master
+                      operator: Exists
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: cis-scan-binding
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: compliance.openshift.io/v1alpha1
+                kind: ScanSettingBinding
+                metadata:
+                  name: cis-compliance
+                  namespace: openshift-compliance
+                spec:
+                  settingsRef:
+                    name: cis-scan-setting
+                    kind: ScanSetting
+                    apiGroup: compliance.openshift.io/v1alpha1
+                  profiles:
+                    - name: ocp4-cis
+                      kind: Profile
+                      apiGroup: compliance.openshift.io/v1alpha1
+                    - name: ocp4-cis-node
+                      kind: Profile
+                      apiGroup: compliance.openshift.io/v1alpha1
