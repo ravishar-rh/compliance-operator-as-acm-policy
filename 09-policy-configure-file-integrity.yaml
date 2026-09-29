@@ -5,6 +5,7 @@ metadata:
   name: policy-configure-file-integrity
   namespace: compliance-operator-policies
   annotations:
+    argocd.argoproj.io/sync-wave: "1"
     policy.open-cluster-management.io/standards: NIST SP 800-53
     policy.open-cluster-management.io/categories: SI System and Information Integrity
     policy.open-cluster-management.io/controls: SI-7 Software Firmware and Information Integrity

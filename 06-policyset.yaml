@@ -4,6 +4,8 @@ kind: PolicySet
 metadata:
   name: compliance-operator-policyset
   namespace: compliance-operator-policies
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   description: >-
     Deploys the Compliance Operator and File Integrity Operator,
@@ -23,6 +25,8 @@ kind: PlacementBinding
 metadata:
   name: binding-compliance-policyset
   namespace: compliance-operator-policies
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 placementRef:
   name: placement-compliance-operator
   apiGroup: cluster.open-cluster-management.io

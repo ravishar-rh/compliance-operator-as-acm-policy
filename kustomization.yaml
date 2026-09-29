@@ -4,6 +4,7 @@ kind: Kustomization
 
 resources:
   - 00-namespace.yaml
+  - argocd-rbac.yaml
   - 01-policy-install-compliance-operator.yaml
   - 02-policy-cis-scan.yaml
   - 03-policy-check-compliance-results.yaml

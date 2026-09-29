@@ -1,0 +1,88 @@
+---
+# Namespace-scoped RBAC for Argo CD to sync ACM policy resources
+# into compliance-operator-policies.
+#
+# Sync waves: Namespace (-2) → Role (-1) → RoleBinding (0) → policies (1)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-acm-policy-manager
+  namespace: compliance-operator-policies
+  labels:
+    app: compliance-operator-policy
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+rules:
+  # Manage this Role / RoleBinding on subsequent syncs
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - roles
+      - rolebindings
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  # ACM Policy Governance
+  - apiGroups:
+      - policy.open-cluster-management.io
+    resources:
+      - policies
+      - placementbindings
+      - policysets
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  # ACM Placement (namespaced)
+  - apiGroups:
+      - cluster.open-cluster-management.io
+    resources:
+      - placements
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  # Events (optional; helps Argo CD record sync activity)
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-acm-policy-manager
+  namespace: compliance-operator-policies
+  labels:
+    app: compliance-operator-policy
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argocd-acm-policy-manager
+subjects:
+  # OpenShift GitOps default application-controller SA
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-application-controller
+    namespace: openshift-gitops
+  # Uncomment if using upstream Argo CD instead:
+  # - kind: ServiceAccount
+  #   name: argocd-application-controller
+  #   namespace: argocd

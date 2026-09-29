@@ -4,6 +4,8 @@ kind: Placement
 metadata:
   name: placement-compliance-operator
   namespace: compliance-operator-policies
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   predicates:
     - requiredClusterSelector:

@@ -5,3 +5,5 @@ metadata:
   name: compliance-operator-policies
   labels:
     app: compliance-operator-policy
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"

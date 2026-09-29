@@ -5,6 +5,7 @@ metadata:
   name: policy-soc2-compliance-scan
   namespace: compliance-operator-policies
   annotations:
+    argocd.argoproj.io/sync-wave: "1"
     policy.open-cluster-management.io/standards: SOC 2
     policy.open-cluster-management.io/categories: "Security, Availability"
     policy.open-cluster-management.io/controls: >-
