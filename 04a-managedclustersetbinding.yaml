@@ -1,0 +1,13 @@
+---
+# Bind the default ManagedClusterSet into this namespace so Placement can
+# select clusters. Without this, Placement decisions stay empty and
+# policies report "No clusters match this policy".
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: default
+  namespace: compliance-operator-policies
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  clusterSet: default

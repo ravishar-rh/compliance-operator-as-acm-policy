@@ -544,6 +544,8 @@ This repo assumes the following topology:
 
 The Placement targets all clusters labeled `vendor: OpenShift`, which includes `local-cluster` (the hub) automatically.
 
+A `ManagedClusterSetBinding` for the `default` cluster set is required in `compliance-operator-policies`. Without it, Placement selects zero clusters and policies show **No clusters match this policy**.
+
 ## Customization
 
 ### Target Specific Clusters

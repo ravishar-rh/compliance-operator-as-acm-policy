@@ -42,11 +42,12 @@ rules:
       - update
       - patch
       - delete
-  # ACM Placement (namespaced)
+  # ACM Placement / cluster set binding (namespaced)
   - apiGroups:
       - cluster.open-cluster-management.io
     resources:
       - placements
+      - managedclustersetbindings
     verbs:
       - get
       - list
