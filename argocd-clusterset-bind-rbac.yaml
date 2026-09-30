@@ -1,0 +1,39 @@
+---
+# ONE-TIME bootstrap (cluster-admin). Not in kustomization.yaml.
+#
+# Creating a ManagedClusterSetBinding requires permission to *bind* the
+# ManagedClusterSet. That verb is cluster-scoped and cannot be granted via
+# a namespaced Role. Apply this once, then Argo CD can sync
+# 04a-managedclustersetbinding.yaml.
+#
+#   oc apply -f argocd-clusterset-bind-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-bind-default-managedclusterset
+  labels:
+    app: compliance-operator-policy
+rules:
+  - apiGroups:
+      - cluster.open-cluster-management.io
+    resources:
+      - managedclustersets/bind
+    resourceNames:
+      - default
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-bind-default-managedclusterset
+  labels:
+    app: compliance-operator-policy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-bind-default-managedclusterset
+subjects:
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-application-controller
+    namespace: openshift-gitops

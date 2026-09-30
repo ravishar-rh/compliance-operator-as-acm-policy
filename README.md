@@ -546,6 +546,14 @@ The Placement targets all clusters labeled `vendor: OpenShift`, which includes `
 
 A `ManagedClusterSetBinding` for the `default` cluster set is required in `compliance-operator-policies`. Without it, Placement selects zero clusters and policies show **No clusters match this policy**.
 
+Creating that binding also requires cluster-scoped permission to **bind** the ManagedClusterSet. Apply this once as cluster-admin (not synced by Argo CD):
+
+```bash
+oc apply -f argocd-clusterset-bind-rbac.yaml
+```
+
+That grants the OpenShift GitOps application-controller SA `create` on `managedclustersets/bind` for resource name `default` only. After that, re-sync the Argo CD app so `04a-managedclustersetbinding.yaml` can succeed.
+
 ## Customization
 
 ### Target Specific Clusters

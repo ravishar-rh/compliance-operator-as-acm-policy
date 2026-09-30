@@ -2,6 +2,9 @@
 # Bind the default ManagedClusterSet into this namespace so Placement can
 # select clusters. Without this, Placement decisions stay empty and
 # policies report "No clusters match this policy".
+#
+# Prerequisite: apply argocd-clusterset-bind-rbac.yaml once as cluster-admin
+# so the GitOps SA can bind ManagedClusterSet "default".
 apiVersion: cluster.open-cluster-management.io/v1beta2
 kind: ManagedClusterSetBinding
 metadata:
