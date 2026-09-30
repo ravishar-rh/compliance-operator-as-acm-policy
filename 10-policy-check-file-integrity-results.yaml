@@ -2,7 +2,7 @@
 apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
 metadata:
-  name: policy-check-file-integrity-results
+  name: policy-check-fio-results
   namespace: compliance-operator-policies
   annotations:
     argocd.argoproj.io/sync-wave: "1"

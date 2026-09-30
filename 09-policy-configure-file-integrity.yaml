@@ -16,7 +16,7 @@ spec:
     - apiVersion: policy.open-cluster-management.io/v1
       compliance: Compliant
       kind: Policy
-      name: policy-install-file-integrity-operator
+      name: policy-install-fio
       namespace: compliance-operator-policies
   policy-templates:
     - objectDefinition:

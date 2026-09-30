@@ -16,9 +16,9 @@ spec:
     - policy-cis-compliance-scan
     - policy-soc2-compliance-scan
     - policy-check-compliance-results
-    - policy-install-file-integrity-operator
+    - policy-install-fio
     - policy-configure-file-integrity
-    - policy-check-file-integrity-results
+    - policy-check-fio-results
 ---
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding

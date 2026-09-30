@@ -66,7 +66,7 @@ subjects:
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
-  name: binding-install-file-integrity-operator
+  name: binding-install-fio
   namespace: compliance-operator-policies
   annotations:
     argocd.argoproj.io/sync-wave: "1"
@@ -75,7 +75,7 @@ placementRef:
   apiGroup: cluster.open-cluster-management.io
   kind: Placement
 subjects:
-  - name: policy-install-file-integrity-operator
+  - name: policy-install-fio
     apiGroup: policy.open-cluster-management.io
     kind: Policy
 ---
@@ -98,7 +98,7 @@ subjects:
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
-  name: binding-check-file-integrity-results
+  name: binding-check-fio-results
   namespace: compliance-operator-policies
   annotations:
     argocd.argoproj.io/sync-wave: "1"
@@ -107,6 +107,6 @@ placementRef:
   apiGroup: cluster.open-cluster-management.io
   kind: Placement
 subjects:
-  - name: policy-check-file-integrity-results
+  - name: policy-check-fio-results
     apiGroup: policy.open-cluster-management.io
     kind: Policy

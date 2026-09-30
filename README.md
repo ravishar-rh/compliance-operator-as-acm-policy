@@ -65,9 +65,9 @@ policy-install-compliance-operator
     ├── policy-soc2-compliance-scan           (waits for operator install)
     └── policy-check-compliance-results      (waits for CIS scan)
 
-policy-install-file-integrity-operator
+policy-install-fio
     └── policy-configure-file-integrity      (waits for FIO install)
-        └── policy-check-file-integrity-results  (waits for FIO configuration)
+        └── policy-check-fio-results  (waits for FIO configuration)
 ```
 
 ## Deployment
@@ -508,7 +508,7 @@ oc annotate fileintegrities/worker-fileintegrity \
 
 ### File Integrity in the ACM Governance Dashboard
 
-The `policy-check-file-integrity-results` policy reports as **NonCompliant** in the ACM Governance dashboard when:
+The `policy-check-fio-results` policy reports as **NonCompliant** in the ACM Governance dashboard when:
 - The `FileIntegrity` CR is not in `Active` phase (operator not running correctly)
 - Any `FileIntegrityNodeStatus` reports a `Failed` condition (unauthorized file changes detected)
 
