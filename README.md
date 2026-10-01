@@ -594,175 +594,83 @@ spec:
 
 ## Troubleshooting
 
-All steps below use **`oc` only** (no `argocd` CLI). Run them on the **ACM hub** unless noted.
+All steps use **`oc` only**. Run them on the **ACM hub** unless a step says to use a managed cluster.
 
-> **Important:** Always use the Argo CD API group.  
-> Wrong: `oc get application` → often resolves to `applications.app.k8s.io`  
-> Right: `oc get applications.argoproj.io` or `oc get app.argoproj.io`
+Do **not** use `oc get application` or `applications.argoproj.io`. Many clusters do not have that API (`server doesn't have a resource type "applications"` / `"application"`). Troubleshoot the **ACM Policy** resources this repo creates instead.
 
-### 0. Confirm OpenShift GitOps and the Application exist
+### 1. Confirm you are on the hub and policies exist
 
 ```bash
-# Are you on the hub?
+oc whoami --show-server
 oc get managedcluster
 
-# Is GitOps installed?
-oc get ns openshift-gitops
-oc get csv -n openshift-gitops
-oc get pods -n openshift-gitops
-oc get crd applications.argoproj.io
-
-# List Argo CD Applications (empty means none were created yet)
-oc get applications.argoproj.io -n openshift-gitops
-oc get applications.argoproj.io -A
+oc get ns compliance-operator-policies
+oc get policies.policy.open-cluster-management.io -n compliance-operator-policies
+oc get policysets.policy.open-cluster-management.io -n compliance-operator-policies
+oc get placementbindings.policy.open-cluster-management.io -n compliance-operator-policies
+oc get placements.cluster.open-cluster-management.io -n compliance-operator-policies
+oc get managedclustersetbindings.cluster.open-cluster-management.io -n compliance-operator-policies
 ```
 
-If the CRD is missing, install the **OpenShift GitOps Operator** from OperatorHub first.
-
-If GitOps is healthy but **no Applications** appear, create one pointing at this repo:
+If the namespace or policies are missing, apply this repo (or re-sync whatever deploys it):
 
 ```bash
-cat <<'EOF' | oc apply -f -
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: compliance-operator-policies
-  namespace: openshift-gitops
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/ravishar-rh/compliance-operator-as-acm-policy.git
-    targetRevision: main
-    path: .
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: compliance-operator-policies
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
-EOF
-
-oc get applications.argoproj.io -n openshift-gitops
+oc apply -k .
+# or apply the ManagedClusterSet bind bootstrap once if Placement stays empty:
+oc apply -f argocd-clusterset-bind-rbac.yaml
 ```
 
-Set a shell variable for the rest of the steps (adjust name/namespace if different):
-
-```bash
-APP=compliance-operator-policies
-APPNS=openshift-gitops
-```
-
-### Argo CD Application shows Degraded
-
-**Degraded** means at least one synced resource is unhealthy, or GitOps could not evaluate health. For this app that is usually an ACM Policy, Placement, or RBAC object — not necessarily a Git problem.
-
-#### 1. Identify what is unhealthy
-
-```bash
-oc get applications.argoproj.io "$APP" -n "$APPNS" \
-  -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status
-
-# Application-level conditions (ComparisonError, SyncError, etc.)
-oc get applications.argoproj.io "$APP" -n "$APPNS" \
-  -o jsonpath='{range .status.conditions[*]}{.type}{"="}{.status}{" | "}{.message}{"\n"}{end}'
-
-# Per-resource sync/health (find Degraded / OutOfSync / Missing)
-oc get applications.argoproj.io "$APP" -n "$APPNS" \
-  -o jsonpath='{range .status.resources[*]}{.kind}/{.namespace}/{.name}{" sync="}{.status}{" health="}{.health.status}{" msg="}{.health.message}{"\n"}{end}'
-
-# Full status dump if needed
-oc get applications.argoproj.io "$APP" -n "$APPNS" -o yaml | oc neat 2>/dev/null || \
-  oc get applications.argoproj.io "$APP" -n "$APPNS" -o yaml
-```
-
-In the OpenShift console: **GitOps → Applications** → open the app → note Kind/Name with Health **Degraded**.
-
-#### 2. Map the symptom to a cause
+### 2. Symptom → cause
 
 | Symptom | Likely cause |
 |---------|----------------|
-| `applications.argoproj.io` NotFound / empty list | Application never created, wrong namespace, or GitOps not installed |
-| `ComparisonError` / Failed to load live or target state | Cluster cache broken (often leftover CNV / `HyperConverged` webhook) |
-| Sync failed: policy namespace + name exceed 62 characters | ACM Policy admission webhook name-length limit |
-| Sync failed: not allowed to bind cluster set `default` | Missing `argocd-clusterset-bind-rbac.yaml` bootstrap |
-| Policy health Degraded; **No clusters match this policy** | Missing `ManagedClusterSetBinding` or Placement selects zero clusters |
-| Policy **NonCompliant** | Operator CSV/deploy or scan failing on managed clusters |
-| Sync webhook / forbidden in controller logs | RBAC or admission denial |
+| `server doesn't have resource type "application(s)"` | Argo CD CRDs not on this cluster — ignore GitOps Application commands; use Policy checks below |
+| Policy message **No clusters match this policy** | Missing `ManagedClusterSetBinding`, Placement selects zero clusters, or clusters lack `vendor=OpenShift` |
+| Policy **NonCompliant** / install Failed / progress deadline | Operator CSV or Deployment failing on the managed cluster (often master vs worker scheduling) |
+| Policy create denied: namespace + name exceed 62 characters | ACM admission name-length limit |
+| ManagedClusterSetBinding create forbidden / cannot bind `default` | Missing `argocd-clusterset-bind-rbac.yaml` (cluster-admin one-time apply) |
 
-#### 3. ComparisonError (cluster cache / CNV webhook)
-
-GitOps lists cluster APIs to build its cache. A broken OpenShift Virtualization (`hco.kubevirt.io`) conversion webhook can fail the entire cache and make **every** Application look broken:
+### 3. Policy status (why something looks Degraded / NonCompliant)
 
 ```bash
-oc get crd hyperconvergeds.hco.kubevirt.io
-oc get crd hyperconvergeds.hco.kubevirt.io -o yaml | grep -A5 conversion
-oc get svc -n openshift-cnv hco-webhook-service
+NS=compliance-operator-policies
+
+oc get policies.policy.open-cluster-management.io -n "$NS" \
+  -o custom-columns=NAME:.metadata.name,COMPLIANT:.status.compliant,REMEDIATION:.spec.remediationAction
+
+# Per-policy status and messages
+for p in $(oc get policies.policy.open-cluster-management.io -n "$NS" -o name); do
+  echo "===== $p ====="
+  oc get -n "$NS" "$p" -o jsonpath='{.status.compliant}{"\n"}{.status.status}{"\n"}'
+  oc get -n "$NS" "$p" -o yaml | grep -E 'compliant:|reason:|message:|clustername:' | head -40
+  echo
+done
 ```
 
-**Fix options:**
+In the ACM console: **Governance → Policies** (or **Policy sets**) — open the NonCompliant / Degraded policy and read the cluster status message.
 
-- If CNV is not used: remove orphan CRDs, for example  
-  `oc delete crd hyperconvergeds.hco.kubevirt.io`
-- If CNV is required: repair the operator so `hco-webhook-service` exists in `openshift-cnv`
-- Workaround — exclude the API from the GitOps ConfigMap:
+### 4. No clusters match this policy
 
 ```bash
-oc get configmap argocd-cm -n openshift-gitops -o yaml
-# Edit and add under data:
-#   resource.exclusions: |
-#     - apiGroups:
-#         - hco.kubevirt.io
-#       kinds:
-#         - "*"
-#       clusters:
-#         - "*"
-oc edit configmap argocd-cm -n openshift-gitops
-```
+NS=compliance-operator-policies
 
-Restart the application controller so the cache rebuilds:
-
-```bash
-oc delete pod -n openshift-gitops \
-  -l app.kubernetes.io/name=openshift-gitops-application-controller
-oc get pods -n openshift-gitops -w
-```
-
-#### 4. Policy name length (ACM admission)
-
-`len(policy namespace) + len(policy name)` must be **≤ 62**. With namespace `compliance-operator-policies` (28), names may be at most 34 characters. Prefer short names (for example `policy-install-fio`, `policy-check-fio-results`).
-
-Check sync errors on the Application:
-
-```bash
-oc get applications.argoproj.io "$APP" -n "$APPNS" \
-  -o jsonpath='{.status.operationState.message}{"\n"}'
-oc get applications.argoproj.io "$APP" -n "$APPNS" \
-  -o jsonpath='{range .status.operationState.syncResult.resources[*]}{.kind}/{.name}{" "}{.message}{"\n"}{end}'
-```
-
-#### 5. No clusters match this policy
-
-```bash
-oc get policies.policy.open-cluster-management.io -n compliance-operator-policies
-oc get managedclustersetbinding -n compliance-operator-policies
-oc get placement.cluster.open-cluster-management.io \
-  placement-compliance-operator -n compliance-operator-policies -o yaml
-oc get placementdecision -n compliance-operator-policies
-oc get managedcluster --show-labels | grep vendor
+oc get managedclustersetbindings.cluster.open-cluster-management.io -n "$NS"
+oc get placements.cluster.open-cluster-management.io placement-compliance-operator -n "$NS" -o yaml
+oc get placementdecisions.cluster.open-cluster-management.io -n "$NS"
+oc get placementdecisions.cluster.open-cluster-management.io -n "$NS" -o yaml
+oc get managedcluster --show-labels
+oc get managedcluster -l vendor=OpenShift
 ```
 
 Ensure:
 
-1. `ManagedClusterSetBinding` for `default` exists in `compliance-operator-policies` (`04a-managedclustersetbinding.yaml`).
-2. Bootstrap bind RBAC was applied once: `oc apply -f argocd-clusterset-bind-rbac.yaml`.
-3. Managed clusters have label `vendor=OpenShift`.
-4. PlacementDecision lists the expected clusters.
+1. A `ManagedClusterSetBinding` for `default` exists in `$NS` (`04a-managedclustersetbinding.yaml`).
+2. Bootstrap bind RBAC was applied once by a cluster-admin:  
+   `oc apply -f argocd-clusterset-bind-rbac.yaml`
+3. Target clusters have label `vendor=OpenShift`.
+4. `PlacementDecision` lists the expected clusters.
 
-Verify bind permission for the GitOps SA:
+Verify bind permission (GitOps SA or your deployer SA):
 
 ```bash
 oc get clusterrolebinding argocd-bind-default-managedclusterset
@@ -770,60 +678,83 @@ oc auth can-i create managedclustersets/bind \
   --as=system:serviceaccount:openshift-gitops:openshift-gitops-argocd-application-controller
 ```
 
-#### 6. Operator install Failed / progress deadline
+### 5. Policy name length (ACM admission)
 
-On ROSA HCP and worker-only clusters, the Compliance Operator defaults to scheduling on **master** nodes. Subscriptions in this repo set `nodeSelector: node-role.kubernetes.io/worker: ""`.
+`len(policy namespace) + len(policy name)` must be **≤ 62**.  
+With namespace `compliance-operator-policies` (28 chars), policy names may be at most **34** characters.
 
-On each affected managed cluster (or `local-cluster`):
+```bash
+NS=compliance-operator-policies
+oc get policies.policy.open-cluster-management.io -n "$NS" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | \
+  while read n; do echo "$((${#NS} + ${#n})) $n"; done
+```
+
+Totals must be ≤ 62. This repo uses short names such as `policy-install-fio` and `policy-check-fio-results`.
+
+### 6. Operator install Failed / progress deadline
+
+On ROSA HCP and worker-only clusters, the Compliance Operator defaults to **master** nodes. This repo’s Subscriptions set `nodeSelector: node-role.kubernetes.io/worker: ""`.
+
+On each **affected managed cluster** (or hub `local-cluster`):
 
 ```bash
 oc get csv,sub,deploy,pods -n openshift-compliance
-oc describe deploy compliance-operator -n openshift-compliance
+oc describe deploy -n openshift-compliance
 oc get pods -n openshift-compliance -o wide
 oc describe pod -n openshift-compliance -l name=compliance-operator
 oc get events -n openshift-compliance --sort-by='.lastTimestamp' | tail -30
+oc get nodes -l node-role.kubernetes.io/worker
 ```
 
-If the CSV is stuck Failed after the Subscription was fixed, reset so the policy can reinstall:
+If the CSV is stuck `Failed` after the Subscription was fixed, reset so the policy can reinstall:
 
 ```bash
 oc delete csv -n openshift-compliance --all
 oc delete sub -n openshift-compliance --all
 ```
 
-Repeat for `openshift-file-integrity` if FIO failed the same way.
+Repeat for `openshift-file-integrity` if File Integrity Operator failed the same way.
 
-#### 7. Sync / RBAC denials
+### 7. Hub RBAC / apply failures
+
+```bash
+oc get role,rolebinding -n compliance-operator-policies
+oc get clusterrole argocd-bind-default-managedclusterset
+oc get clusterrolebinding argocd-bind-default-managedclusterset
+oc get events -n compliance-operator-policies --sort-by='.lastTimestamp' | tail -40
+```
+
+Namespace Role/RoleBinding: `argocd-rbac.yaml`.  
+Cluster-set bind (one-time, cluster-admin): `argocd-clusterset-bind-rbac.yaml`.
+
+### 8. Optional: OpenShift GitOps (only if the API exists)
+
+Skip this entire section if the cluster has no Argo CD CRDs:
+
+```bash
+oc api-resources --api-group=argoproj.io
+# If this prints nothing / errors, stop — use sections 1–7 only.
+```
+
+Only when `argoproj.io` resources are listed:
+
+```bash
+oc get crd | grep argoproj.io
+oc get ns openshift-gitops
+oc get pods -n openshift-gitops
+```
+
+GitOps cache can break when a leftover CNV/`HyperConverged` conversion webhook points at a missing service:
+
+```bash
+oc get crd hyperconvergeds.hco.kubevirt.io
+oc get svc -n openshift-cnv hco-webhook-service
+```
+
+If GitOps pods exist, controller logs (optional):
 
 ```bash
 oc logs -n openshift-gitops \
   -l app.kubernetes.io/name=openshift-gitops-application-controller --tail=200 | \
-  grep -iE 'denied|forbidden|webhook|error|compliance-operator-policies'
-
-oc get role,rolebinding -n compliance-operator-policies
-oc get clusterrole,clusterrolebinding | grep argocd-bind-default
-```
-
-Namespace-scoped permissions for Policies/Placements are in `argocd-rbac.yaml`. Cluster-set **bind** cannot be namespaced; use `argocd-clusterset-bind-rbac.yaml` (apply once as cluster-admin).
-
-#### 8. Force a refresh after fixes
-
-There is no `argocd` CLI required — annotate the Application or restart the controller:
-
-```bash
-# Soft refresh
-oc annotate applications.argoproj.io "$APP" -n "$APPNS" \
-  argocd.argoproj.io/refresh=normal --overwrite
-
-# Hard refresh (rebuilds cache for this app)
-oc annotate applications.argoproj.io "$APP" -n "$APPNS" \
-  argocd.argoproj.io/refresh=hard --overwrite
-
-# Or restart the controller (see step 3)
-oc delete pod -n openshift-gitops \
-  -l app.kubernetes.io/name=openshift-gitops-application-controller
-
-# Re-check health
-oc get applications.argoproj.io "$APP" -n "$APPNS" \
-  -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status
+  grep -iE 'denied|forbidden|webhook|error|compliance'
 ```
