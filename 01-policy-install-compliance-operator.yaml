@@ -28,6 +28,12 @@ spec:
                 kind: Namespace
                 metadata:
                   name: openshift-compliance
+                  labels:
+                    openshift.io/cluster-monitoring: "true"
+                    pod-security.kubernetes.io/enforce: privileged
+                  annotations:
+                    # Clear any cluster defaultNodeSelector so the operator can schedule
+                    openshift.io/node-selector: ""
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
@@ -69,6 +75,11 @@ spec:
                   name: compliance-operator
                   source: redhat-operators
                   sourceNamespace: openshift-marketplace
+                  # Required on ROSA HCP / worker-only clusters: default master
+                  # nodeSelector leaves pods Pending and the CSV hits progress deadline.
+                  config:
+                    nodeSelector:
+                      node-role.kubernetes.io/worker: ""
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy

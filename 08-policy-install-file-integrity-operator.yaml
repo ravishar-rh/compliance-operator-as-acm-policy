@@ -28,6 +28,11 @@ spec:
                 kind: Namespace
                 metadata:
                   name: openshift-file-integrity
+                  labels:
+                    openshift.io/cluster-monitoring: "true"
+                    pod-security.kubernetes.io/enforce: privileged
+                  annotations:
+                    openshift.io/node-selector: ""
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
@@ -69,6 +74,9 @@ spec:
                   name: file-integrity-operator
                   source: redhat-operators
                   sourceNamespace: openshift-marketplace
+                  config:
+                    nodeSelector:
+                      node-role.kubernetes.io/worker: ""
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
