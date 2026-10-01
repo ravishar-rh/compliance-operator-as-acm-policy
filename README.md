@@ -596,7 +596,25 @@ spec:
 
 All steps use **`oc` only**. Run them on the **ACM hub** unless a step says to use a managed cluster.
 
-Do **not** use `oc get application` or `applications.argoproj.io`. Many clusters do not have that API (`server doesn't have a resource type "applications"` / `"application"`). Troubleshoot the **ACM Policy** resources this repo creates instead.
+### GitOps Application resource name
+
+On OpenShift GitOps, use the short name **`apps`** (not `application` / `applications.argoproj.io`, which often fail with `server doesn't have a resource type "application"`):
+
+```bash
+# Works on OpenShift GitOps
+oc get apps -A
+oc get apps -n openshift-gitops
+
+# Confirm what "apps" maps to
+oc api-resources | grep -E 'NAME|apps'
+```
+
+Do **not** use:
+
+```bash
+oc get application          # wrong API (often app.k8s.io) or unknown type
+oc get applications.argoproj.io   # may fail depending on discovery / client
+```
 
 ### 1. Confirm you are on the hub and policies exist
 
@@ -624,7 +642,8 @@ oc apply -f argocd-clusterset-bind-rbac.yaml
 
 | Symptom | Likely cause |
 |---------|----------------|
-| `server doesn't have resource type "application(s)"` | Argo CD CRDs not on this cluster — ignore GitOps Application commands; use Policy checks below |
+| `oc get application` fails; `oc get apps -A` works | Use short name `apps` for Argo CD Applications |
+| GitOps app **Degraded** / OutOfSync | Unhealthy Policy/Placement under the app — inspect with `oc get apps` then Policy checks below |
 | Policy message **No clusters match this policy** | Missing `ManagedClusterSetBinding`, Placement selects zero clusters, or clusters lack `vendor=OpenShift` |
 | Policy **NonCompliant** / install Failed / progress deadline | Operator CSV or Deployment failing on the managed cluster (often master vs worker scheduling) |
 | Policy create denied: namespace + name exceed 62 characters | ACM admission name-length limit |
@@ -727,21 +746,44 @@ oc get events -n compliance-operator-policies --sort-by='.lastTimestamp' | tail 
 Namespace Role/RoleBinding: `argocd-rbac.yaml`.  
 Cluster-set bind (one-time, cluster-admin): `argocd-clusterset-bind-rbac.yaml`.
 
-### 8. Optional: OpenShift GitOps (only if the API exists)
-
-Skip this entire section if the cluster has no Argo CD CRDs:
+### 8. OpenShift GitOps Application health (`oc get apps`)
 
 ```bash
-oc api-resources --api-group=argoproj.io
-# If this prints nothing / errors, stop — use sections 1–7 only.
+APPNS=openshift-gitops
+APP=compliance-operator-policies   # adjust if your app name differs
+
+oc get apps -A
+oc get apps -n "$APPNS"
+oc get apps "$APP" -n "$APPNS" \
+  -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status
+
+# Conditions (ComparisonError, SyncError, …)
+oc get apps "$APP" -n "$APPNS" \
+  -o jsonpath='{range .status.conditions[*]}{.type}{"="}{.status}{" | "}{.message}{"\n"}{end}'
+
+# Per-resource sync/health inside the app
+oc get apps "$APP" -n "$APPNS" \
+  -o jsonpath='{range .status.resources[*]}{.kind}/{.namespace}/{.name}{" sync="}{.status}{" health="}{.health.status}{" msg="}{.health.message}{"\n"}{end}'
+
+# Last sync message
+oc get apps "$APP" -n "$APPNS" \
+  -o jsonpath='{.status.operationState.phase}{" "}{.status.operationState.message}{"\n"}'
 ```
 
-Only when `argoproj.io` resources are listed:
+If the app is missing:
 
 ```bash
-oc get crd | grep argoproj.io
+oc get apps -A | grep -i compliance
 oc get ns openshift-gitops
 oc get pods -n openshift-gitops
+```
+
+Force a refresh (no `argocd` CLI):
+
+```bash
+oc annotate apps "$APP" -n "$APPNS" argocd.argoproj.io/refresh=hard --overwrite
+oc get apps "$APP" -n "$APPNS" \
+  -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status
 ```
 
 GitOps cache can break when a leftover CNV/`HyperConverged` conversion webhook points at a missing service:
@@ -749,12 +791,9 @@ GitOps cache can break when a leftover CNV/`HyperConverged` conversion webhook p
 ```bash
 oc get crd hyperconvergeds.hco.kubevirt.io
 oc get svc -n openshift-cnv hco-webhook-service
-```
-
-If GitOps pods exist, controller logs (optional):
-
-```bash
 oc logs -n openshift-gitops \
   -l app.kubernetes.io/name=openshift-gitops-application-controller --tail=200 | \
   grep -iE 'denied|forbidden|webhook|error|compliance'
 ```
+
+If a Policy under the app is Degraded, continue with sections 3–6 (Placement, operator install, etc.).
