@@ -591,3 +591,133 @@ spec:
 ```
 
 > **Warning**: Auto-remediation may trigger node reboots (e.g., for kernel parameters or MachineConfig changes). Test in non-production first.
+
+## Troubleshooting
+
+### Argo CD Application shows Degraded
+
+**Degraded** means at least one synced resource is unhealthy, or Argo CD could not evaluate health. For this app that is usually an ACM Policy, Placement, or RBAC object — not necessarily a Git sync problem.
+
+#### 1. Identify what is unhealthy
+
+```bash
+oc get application compliance-operator-policies -n openshift-gitops -o yaml
+
+# Application conditions (ComparisonError, SyncError, etc.)
+oc get application compliance-operator-policies -n openshift-gitops \
+  -o jsonpath='{range .status.conditions[*]}{.type}{"="}{.status}{" | "}{.message}{"\n"}{end}'
+```
+
+In the Argo CD UI, open the app and filter by **Health: Degraded**, **Missing**, or **OutOfSync**. Note the Kind and Name of the failing resource.
+
+With the Argo CD CLI:
+
+```bash
+argocd app get compliance-operator-policies
+argocd app resources compliance-operator-policies
+```
+
+#### 2. Map the symptom to a cause
+
+| Symptom | Likely cause |
+|---------|----------------|
+| `ComparisonError` / Failed to load live or target state | Cluster cache broken (often leftover CNV / `HyperConverged` webhook) |
+| Sync failed: policy namespace + name exceed 62 characters | ACM Policy admission webhook name-length limit |
+| Sync failed: not allowed to bind cluster set `default` | Missing `argocd-clusterset-bind-rbac.yaml` bootstrap |
+| Policy health Degraded; message **No clusters match this policy** | Missing `ManagedClusterSetBinding` or Placement selects zero clusters |
+| Policy **NonCompliant** | Operator CSV/deploy or scan failing on managed clusters |
+| Sync webhook / forbidden in controller logs | RBAC or admission denial |
+
+#### 3. ComparisonError (cluster cache / CNV webhook)
+
+Argo CD lists cluster APIs to build its cache. A broken OpenShift Virtualization (`hco.kubevirt.io`) conversion webhook can fail the entire cache and make **every** Application look broken:
+
+```bash
+oc get crd hyperconvergeds.hco.kubevirt.io -o yaml | grep -A5 conversion
+oc get svc -n openshift-cnv hco-webhook-service
+```
+
+**Fix options:**
+
+- If CNV is not used: remove orphan CRDs (`oc delete crd hyperconvergeds.hco.kubevirt.io` and related kubevirt/hco CRDs).
+- If CNV is required: repair the operator so `hco-webhook-service` exists in `openshift-cnv`.
+- Workaround: exclude the API in `argocd-cm`:
+
+```yaml
+data:
+  resource.exclusions: |
+    - apiGroups:
+        - hco.kubevirt.io
+      kinds:
+        - "*"
+      clusters:
+        - "*"
+```
+
+Then restart the application controller:
+
+```bash
+oc delete pod -n openshift-gitops \
+  -l app.kubernetes.io/name=openshift-gitops-application-controller
+```
+
+#### 4. Policy name length (ACM admission)
+
+`len(policy namespace) + len(policy name)` must be **≤ 62**. With namespace `compliance-operator-policies` (28), names may be at most 34 characters. Prefer short names (for example `policy-install-fio`, `policy-check-fio-results`).
+
+#### 5. No clusters match this policy
+
+```bash
+oc get managedclustersetbinding -n compliance-operator-policies
+oc get placement placement-compliance-operator -n compliance-operator-policies -o yaml
+oc get placementdecision -n compliance-operator-policies
+oc get managedcluster --show-labels | grep vendor
+```
+
+Ensure:
+
+1. `ManagedClusterSetBinding` for `default` exists in `compliance-operator-policies` (`04a-managedclustersetbinding.yaml`).
+2. Bootstrap bind RBAC was applied once: `oc apply -f argocd-clusterset-bind-rbac.yaml`.
+3. Managed clusters have label `vendor=OpenShift`.
+4. PlacementDecision lists the expected clusters.
+
+#### 6. Operator install Failed / progress deadline
+
+On ROSA HCP and worker-only clusters, the Compliance Operator defaults to scheduling on **master** nodes. Subscriptions in this repo set `nodeSelector: node-role.kubernetes.io/worker: ""`.
+
+On each affected cluster:
+
+```bash
+oc get csv,sub,deploy,pods -n openshift-compliance
+oc describe pod -n openshift-compliance -l name=compliance-operator
+oc get events -n openshift-compliance --sort-by='.lastTimestamp' | tail -30
+```
+
+If the CSV is stuck Failed after fixing the Subscription, reset so the policy can reinstall:
+
+```bash
+oc delete csv -n openshift-compliance --all
+oc delete sub -n openshift-compliance --all
+```
+
+Repeat for `openshift-file-integrity` if FIO failed the same way.
+
+#### 7. Sync / RBAC denials
+
+```bash
+oc logs -n openshift-gitops \
+  -l app.kubernetes.io/name=openshift-gitops-application-controller --tail=100
+
+oc get clusterrolebinding argocd-bind-default-managedclusterset
+oc auth can-i create managedclustersets/bind \
+  --as=system:serviceaccount:openshift-gitops:openshift-gitops-argocd-application-controller
+```
+
+Namespace-scoped permissions for Policies/Placements are in `argocd-rbac.yaml`. Cluster-set **bind** cannot be namespaced; use `argocd-clusterset-bind-rbac.yaml` (apply once as cluster-admin).
+
+#### 8. Hard refresh after fixes
+
+```bash
+argocd app get compliance-operator-policies --hard-refresh
+# or restart the controller (see step 3)
+```
