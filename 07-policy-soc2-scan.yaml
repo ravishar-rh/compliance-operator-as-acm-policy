@@ -38,19 +38,14 @@ spec:
                 metadata:
                   name: soc2-scan-setting
                   namespace: openshift-compliance
-                spec:
-                  schedule: "0 2 * * *"
+                roles:
+                  - worker
+                schedule: "0 2 * * *"
+                rawResultStorage:
+                  pvAccessModes:
+                    - ReadWriteOnce
                   rotation: 5
-                  roles:
-                    - worker
-                  rawResultStorage:
-                    pvAccessModes:
-                      - ReadWriteOnce
-                    size: 2Gi
-                    tolerations:
-                      - effect: NoSchedule
-                        key: node-role.kubernetes.io/master
-                        operator: Exists
+                  size: 2Gi
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy

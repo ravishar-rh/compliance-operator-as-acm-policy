@@ -35,11 +35,11 @@ spec:
                 metadata:
                   name: cis-scan-setting
                   namespace: openshift-compliance
-                spec:
-                  schedule: "0 1 * * *"
+                roles:
+                  - worker
+                schedule: "0 1 * * *"
+                rawResultStorage:
                   rotation: 3
-                  roles:
-                    - worker
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
