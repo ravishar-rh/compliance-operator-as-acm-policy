@@ -48,7 +48,6 @@ The Compliance Operator's NIST Moderate profile includes the rule `ocp4-file-int
 ├── 04a-managedclustersetbinding.yaml           # Binds default ManagedClusterSet to namespace
 ├── 05-placementbindings.yaml                   # Binds policies to placement
 ├── 06-policyset.yaml                           # Groups all policies for dashboard view
-├── 07-policy-enable-etcd-encryption.yaml       # Enforces AES-CBC etcd encryption at rest
 ├── 08-policy-install-file-integrity-operator.yaml  # Install FIO (NS, OperatorGroup, Subscription)
 ├── 09-policy-configure-file-integrity.yaml     # FileIntegrity CRs + custom AIDE config (12h interval)
 ├── 10-policy-check-file-integrity-results.yaml # Inform-only policy to surface integrity failures
@@ -56,7 +55,13 @@ The Compliance Operator's NIST Moderate profile includes the rule `ocp4-file-int
 ├── 12-policy-configure-cluster-log-forwarder.yaml  # Forward audit and infra logs to default/SIEM
 ├── argocd-rbac.yaml                            # Namespaced RBAC for Argo CD policy sync
 ├── argocd-clusterset-bind-rbac.yaml            # Cluster-admin bootstrap RBAC for cluster set bind
-├── kustomization.yaml                          # Kustomize overlay for deployment
+├── etcd-encryption/                            # Standalone Application: etcd encryption at rest
+│   ├── policy-enable-etcd-encryption.yaml     # Enforces AES-CBC on APIServer cluster
+│   ├── placementbinding.yaml                   # Binds policy to placement
+│   ├── argocd-application.yaml                 # Dedicated Argo CD Application manifest
+│   ├── kustomization.yaml                      # Independent Kustomize target
+│   └── README.md                               # Operational and migration guide
+├── kustomization.yaml                          # Kustomize overlay for main application
 └── README.md
 ```
 
@@ -69,14 +74,14 @@ policy-install-compliance-operator
     ├── policy-cis-compliance-scan            (waits for operator install)
     └── policy-check-compliance-results       (waits for CIS scan)
 
-policy-enable-etcd-encryption                 (independent; enforces AES-CBC on APIServer)
-
 policy-install-fio
     └── policy-configure-file-integrity       (waits for FIO install)
         └── policy-check-fio-results          (waits for FIO configuration)
 
 policy-install-logging
     └── policy-configure-log-forwarder        (waits for logging install)
+
+# Note: etcd encryption is decoupled in etcd-encryption/ as a standalone application.
 ```
 
 ## Deployment
@@ -300,7 +305,7 @@ There is no direct "SOC 2" technical benchmark in the Compliance Operator or Ope
 
 | SOC 2 Trust Service Criteria | Control Area | Policy in this Repo |
 |------------------------------|--------------|---------------------|
-| **CC6.6** -- Data Protection | Encryption at Rest (`etcd` AES-CBC) | `07-policy-enable-etcd-encryption.yaml` |
+| **CC6.6** -- Data Protection | Encryption at Rest (`etcd` AES-CBC) | Standalone app in `etcd-encryption/` |
 | **CC7.1** -- System Integrity | Continuous File Integrity Monitoring (FIO / AIDE) | `08`, `09`, `10` (File Integrity Operator) |
 | **CC7.2** -- System Monitoring | Audit & Infrastructure Log Forwarding | `11-policy-install-logging.yaml`, `12-policy-configure-cluster-log-forwarder.yaml` |
 | **CC6.1 / CC8.1** -- Hardening & Baseline | CIS Benchmark Scanning | `01`, `02`, `03` (Compliance Operator CIS) |

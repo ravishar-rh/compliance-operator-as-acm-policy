@@ -9,14 +9,12 @@ metadata:
 spec:
   description: >-
     Deploys the Compliance Operator and File Integrity Operator,
-    configures CIS benchmark scans, enables etcd encryption at rest,
-    configures audit log forwarding, and monitors runtime file
-    integrity across all managed OpenShift clusters.
+    configures CIS benchmark scans, configures audit log forwarding,
+    and monitors runtime file integrity across all managed OpenShift clusters.
   policies:
     - policy-install-compliance-operator
     - policy-cis-compliance-scan
     - policy-check-compliance-results
-    - policy-enable-etcd-encryption
     - policy-install-fio
     - policy-configure-file-integrity
     - policy-check-fio-results

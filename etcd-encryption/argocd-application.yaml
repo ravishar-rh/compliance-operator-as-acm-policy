@@ -1,0 +1,25 @@
+---
+# Standalone Argo CD Application for etcd encryption.
+# Deploy this independently from compliance-operator-policies during a maintenance window.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: etcd-encryption-policy
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: acm-policies
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ravishar-rh/compliance-operator-as-acm-policy.git
+    targetRevision: main
+    path: etcd-encryption
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: compliance-operator-policies
+  syncPolicy:
+    # Manual sync recommended: etcd encryption triggers rolling API server restarts
+    # and background data migration across control plane nodes (15-30 mins).
+    automated: null

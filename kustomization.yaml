@@ -12,7 +12,6 @@ resources:
   - 04-placement.yaml
   - 05-placementbindings.yaml
   - 06-policyset.yaml
-  - 07-policy-enable-etcd-encryption.yaml
   - 08-policy-install-file-integrity-operator.yaml
   - 09-policy-configure-file-integrity.yaml
   - 10-policy-check-file-integrity-results.yaml
