@@ -1,0 +1,75 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: policy-configure-log-forwarder
+  namespace: compliance-operator-policies
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    policy.open-cluster-management.io/standards: SOC 2, NIST SP 800-53
+    policy.open-cluster-management.io/categories: AU Audit and Accountability
+    policy.open-cluster-management.io/controls: >-
+      AU-4 Audit Storage Capacity,
+      AU-9 Protection of Audit Information,
+      CC7.2 System Monitoring
+spec:
+  disabled: false
+  remediationAction: enforce
+  dependencies:
+    - apiVersion: policy.open-cluster-management.io/v1
+      compliance: Compliant
+      kind: Policy
+      name: policy-install-logging
+      namespace: compliance-operator-policies
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: logging-collect-audit-rbac
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: rbac.authorization.k8s.io/v1
+                kind: ClusterRoleBinding
+                metadata:
+                  name: openshift-logging-collect-audit-logs
+                roleRef:
+                  apiGroup: rbac.authorization.k8s.io
+                  kind: ClusterRole
+                  name: collect-audit-logs
+                subjects:
+                  - kind: ServiceAccount
+                    name: logcollector
+                    namespace: openshift-logging
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: cluster-log-forwarder
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: logging.openshift.io/v1
+                kind: ClusterLogForwarder
+                metadata:
+                  name: instance
+                  namespace: openshift-logging
+                spec:
+                  pipelines:
+                    - name: audit-logs
+                      inputRefs:
+                        - audit
+                      outputRefs:
+                        - default
+                    - name: infrastructure-logs
+                      inputRefs:
+                        - infrastructure
+                      outputRefs:
+                        - default

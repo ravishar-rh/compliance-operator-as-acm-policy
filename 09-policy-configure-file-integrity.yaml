@@ -41,7 +41,7 @@ spec:
                   config:
                     name: aide-conf
                     namespace: openshift-file-integrity
-                    gracePeriod: 900
+                    gracePeriod: 43200
                     maxBackups: 5
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
