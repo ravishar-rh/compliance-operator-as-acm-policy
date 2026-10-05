@@ -67,18 +67,17 @@ spec:
                 metadata:
                   name: soc2-compliance
                   namespace: openshift-compliance
-                spec:
-                  settingsRef:
-                    name: soc2-scan-setting
-                    kind: ScanSetting
+                settingsRef:
+                  name: soc2-scan-setting
+                  kind: ScanSetting
+                  apiGroup: compliance.openshift.io/v1alpha1
+                profiles:
+                  - name: ocp4-moderate
+                    kind: Profile
                     apiGroup: compliance.openshift.io/v1alpha1
-                  profiles:
-                    - name: ocp4-moderate
-                      kind: Profile
-                      apiGroup: compliance.openshift.io/v1alpha1
-                    - name: ocp4-moderate-node
-                      kind: Profile
-                      apiGroup: compliance.openshift.io/v1alpha1
+                  - name: ocp4-moderate-node
+                    kind: Profile
+                    apiGroup: compliance.openshift.io/v1alpha1
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
