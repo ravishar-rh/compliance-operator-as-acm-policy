@@ -44,7 +44,7 @@ spec:
           remediationAction: enforce
           severity: high
           object-templates:
-            - complianceType: musthave
+            - complianceType: mustonlyhave
               objectDefinition:
                 apiVersion: compliance.openshift.io/v1alpha1
                 kind: ScanSettingBinding
@@ -68,7 +68,7 @@ spec:
           remediationAction: enforce
           severity: high
           object-templates:
-            - complianceType: musthave
+            - complianceType: mustonlyhave
               objectDefinition:
                 apiVersion: compliance.openshift.io/v1alpha1
                 kind: ScanSettingBinding

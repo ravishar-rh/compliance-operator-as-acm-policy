@@ -49,7 +49,11 @@ spec:
           remediationAction: enforce
           severity: high
           object-templates:
-            - complianceType: musthave
+            # mustonlyhave, not musthave: musthave treats profiles as a
+            # subset check and never prunes entries already on the object,
+            # so dropping a profile here would not remove it from a
+            # binding that already exists.
+            - complianceType: mustonlyhave
               objectDefinition:
                 apiVersion: compliance.openshift.io/v1alpha1
                 kind: ScanSettingBinding

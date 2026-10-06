@@ -58,7 +58,9 @@ spec:
           remediationAction: enforce
           severity: high
           object-templates:
-            - complianceType: musthave
+            # See 02-policy-cis-scan.yaml -- musthave will not prune a
+            # stale profile from an existing binding.
+            - complianceType: mustonlyhave
               objectDefinition:
                 apiVersion: compliance.openshift.io/v1alpha1
                 kind: ScanSettingBinding
