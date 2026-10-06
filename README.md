@@ -45,13 +45,23 @@ The Compliance Operator's NIST Moderate profile includes the rule `ocp4-file-int
 ├── 02-policy-cis-scan.yaml                     # CIS benchmark scan configuration
 ├── 03-policy-check-compliance-results.yaml     # Inform-only policy to surface failures
 ├── 04-placement.yaml                           # Placement targeting OpenShift clusters
+├── 04a-managedclustersetbinding.yaml           # Binds default ManagedClusterSet to namespace
 ├── 05-placementbindings.yaml                   # Binds policies to placement
 ├── 06-policyset.yaml                           # Groups all policies for dashboard view
-├── 07-policy-soc2-scan.yaml                    # SOC 2 / NIST Moderate scan configuration
 ├── 08-policy-install-file-integrity-operator.yaml  # Install FIO (NS, OperatorGroup, Subscription)
-├── 09-policy-configure-file-integrity.yaml     # FileIntegrity CRs + custom AIDE config
+├── 09-policy-configure-file-integrity.yaml     # FileIntegrity CRs + custom AIDE config (12h interval)
 ├── 10-policy-check-file-integrity-results.yaml # Inform-only policy to surface integrity failures
-├── kustomization.yaml                          # Kustomize overlay for deployment
+├── 11-policy-install-logging.yaml              # Install OpenShift Logging Operator
+├── 12-policy-configure-cluster-log-forwarder.yaml  # Forward audit and infra logs to default/SIEM
+├── argocd-rbac.yaml                            # Namespaced RBAC for Argo CD policy sync
+├── argocd-clusterset-bind-rbac.yaml            # Cluster-admin bootstrap RBAC for cluster set bind
+├── etcd-encryption/                            # Standalone Application: etcd encryption at rest
+│   ├── policy-enable-etcd-encryption.yaml     # Enforces AES-CBC on APIServer cluster
+│   ├── placementbinding.yaml                   # Binds policy to placement
+│   ├── argocd-application.yaml                 # Dedicated Argo CD Application manifest
+│   ├── kustomization.yaml                      # Independent Kustomize target
+│   └── README.md                               # Operational and migration guide
+├── kustomization.yaml                          # Kustomize overlay for main application
 └── README.md
 ```
 
@@ -62,12 +72,16 @@ Policies are ordered using `spec.dependencies` to ensure correct sequencing:
 ```
 policy-install-compliance-operator
     ├── policy-cis-compliance-scan            (waits for operator install)
-    ├── policy-soc2-compliance-scan           (waits for operator install)
-    └── policy-check-compliance-results      (waits for CIS scan)
+    └── policy-check-compliance-results       (waits for CIS scan)
 
 policy-install-fio
-    └── policy-configure-file-integrity      (waits for FIO install)
-        └── policy-check-fio-results  (waits for FIO configuration)
+    └── policy-configure-file-integrity       (waits for FIO install)
+        └── policy-check-fio-results          (waits for FIO configuration)
+
+policy-install-logging
+    └── policy-configure-log-forwarder        (waits for logging install)
+
+# Note: etcd encryption is decoupled in etcd-encryption/ as a standalone application.
 ```
 
 ## Deployment
@@ -285,37 +299,18 @@ Common profiles for OpenShift 4.x:
 | `ocp4-nerc-cip` | NERC-CIP (platform) | CC6.1, CC7.1 |
 | `ocp4-nerc-cip-node` | NERC-CIP (node) | CC6.1, CC7.1 |
 
-### SOC 2 Compliance Scanning
+### SOC 2 Compliance Strategy & Operational Controls
 
-There is no direct SOC 2 profile in the Compliance Operator. SOC 2 is an audit framework built around five Trust Service Criteria (TSC), not a technical benchmark. The recommended approach is to scan with **NIST SP 800-53 Moderate** (`ocp4-moderate` / `ocp4-moderate-node`), which provides the strongest coverage of SOC 2 controls:
+There is no direct "SOC 2" technical benchmark in the Compliance Operator or OpenSCAP. Rather than running raw `ocp4-moderate` scans (which produce dozens of false positives on non-FIPS bare-metal clusters and cause alert fatigue), this repository directly operationalizes key SOC 2 Trust Services Criteria (TSC) via ACM policies:
 
-| SOC 2 Trust Service Criteria | NIST 800-53 Control Family | Profile |
-|------------------------------|---------------------------|---------|
-| **CC6** -- Logical & Physical Access | AC (Access Control), IA (Identification & Authentication) | `ocp4-moderate`, `ocp4-moderate-node` |
-| **CC7** -- System Operations & Monitoring | AU (Audit & Accountability), SI (System & Information Integrity) | `ocp4-moderate`, `ocp4-moderate-node` |
-| **CC8** -- Change Management | CM (Configuration Management), SA (System & Services Acquisition) | `ocp4-moderate` |
-| **CC3** -- Risk Assessment | RA (Risk Assessment) | `ocp4-moderate` |
-| **CC5** -- Control Activities | CA (Security Assessment & Authorization) | `ocp4-moderate` |
+| SOC 2 Trust Service Criteria | Control Area | Policy in this Repo |
+|------------------------------|--------------|---------------------|
+| **CC6.6** -- Data Protection | Encryption at Rest (`etcd` AES-CBC) | Standalone app in `etcd-encryption/` |
+| **CC7.1** -- System Integrity | Continuous File Integrity Monitoring (FIO / AIDE) | `08`, `09`, `10` (File Integrity Operator) |
+| **CC7.2** -- System Monitoring | Audit & Infrastructure Log Forwarding | `11-policy-install-logging.yaml`, `12-policy-configure-cluster-log-forwarder.yaml` |
+| **CC6.1 / CC8.1** -- Hardening & Baseline | CIS Benchmark Scanning | `01`, `02`, `03` (Compliance Operator CIS) |
 
-The `07-policy-soc2-scan.yaml` in this repo configures exactly this -- daily NIST Moderate scans with 5 rotations retained for audit trail purposes.
-
-For comprehensive SOC 2 coverage, combine with CIS benchmarks:
-
-```yaml
-profiles:
-  - name: ocp4-moderate
-    kind: Profile
-    apiGroup: compliance.openshift.io/v1alpha1
-  - name: ocp4-moderate-node
-    kind: Profile
-    apiGroup: compliance.openshift.io/v1alpha1
-  - name: ocp4-cis
-    kind: Profile
-    apiGroup: compliance.openshift.io/v1alpha1
-  - name: ocp4-cis-node
-    kind: Profile
-    apiGroup: compliance.openshift.io/v1alpha1
-```
+This approach provides concrete, passing, auditable controls without permanently red dashboards. If full NIST Moderate scanning is required in the future, it should be deployed using a `TailoredProfile` to suppress inapplicable checks (such as FIPS).
 
 ### TailoredProfile (Customizing Rules)
 
@@ -379,7 +374,7 @@ oc get compliancecheckresults -n openshift-compliance \
 
 # Filter results by suite
 oc get compliancecheckresults -n openshift-compliance \
-  -l compliance.openshift.io/suite=soc2-compliance
+  -l compliance.openshift.io/suite=cis-compliance
 
 # Get details on a specific failing check
 oc describe compliancecheckresult/<result-name> -n openshift-compliance
@@ -389,7 +384,7 @@ oc get complianceremediations -n openshift-compliance
 
 # Export results in human-readable format
 oc get compliancecheckresults -n openshift-compliance \
-  -l compliance.openshift.io/suite=soc2-compliance \
+  -l compliance.openshift.io/suite=cis-compliance \
   -o custom-columns=NAME:.metadata.name,STATUS:.status,SEVERITY:.severity,DESCRIPTION:.description
 ```
 
@@ -442,7 +437,7 @@ spec:
   nodeSelector:
     node-role.kubernetes.io/worker: ""
   config:
-    gracePeriod: 900        # Seconds to wait after node boot before first scan
+    gracePeriod: 43200      # 12 hours between scans (avoid CPU/IO jitter on trading nodes)
     maxBackups: 5           # Number of AIDE database backups to retain
 ```
 

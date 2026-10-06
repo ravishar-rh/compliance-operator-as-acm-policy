@@ -9,16 +9,17 @@ metadata:
 spec:
   description: >-
     Deploys the Compliance Operator and File Integrity Operator,
-    configures CIS and SOC 2 benchmark scans with runtime file
-    integrity monitoring on all managed OpenShift clusters.
+    configures CIS benchmark scans, configures audit log forwarding,
+    and monitors runtime file integrity across all managed OpenShift clusters.
   policies:
     - policy-install-compliance-operator
     - policy-cis-compliance-scan
-    - policy-soc2-compliance-scan
     - policy-check-compliance-results
     - policy-install-fio
     - policy-configure-file-integrity
     - policy-check-fio-results
+    - policy-install-logging
+    - policy-configure-log-forwarder
 ---
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding

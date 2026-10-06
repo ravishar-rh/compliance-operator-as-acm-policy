@@ -12,7 +12,8 @@ resources:
   - 04-placement.yaml
   - 05-placementbindings.yaml
   - 06-policyset.yaml
-  - 07-policy-soc2-scan.yaml
   - 08-policy-install-file-integrity-operator.yaml
   - 09-policy-configure-file-integrity.yaml
   - 10-policy-check-file-integrity-results.yaml
+  - 11-policy-install-logging.yaml
+  - 12-policy-configure-cluster-log-forwarder.yaml

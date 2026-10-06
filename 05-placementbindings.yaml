@@ -50,22 +50,6 @@ subjects:
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
-  name: binding-soc2-compliance-scan
-  namespace: compliance-operator-policies
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
-placementRef:
-  name: placement-compliance-operator
-  apiGroup: cluster.open-cluster-management.io
-  kind: Placement
-subjects:
-  - name: policy-soc2-compliance-scan
-    apiGroup: policy.open-cluster-management.io
-    kind: Policy
----
-apiVersion: policy.open-cluster-management.io/v1
-kind: PlacementBinding
-metadata:
   name: binding-install-fio
   namespace: compliance-operator-policies
   annotations:
@@ -108,5 +92,37 @@ placementRef:
   kind: Placement
 subjects:
   - name: policy-check-fio-results
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-install-logging
+  namespace: compliance-operator-policies
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+placementRef:
+  name: placement-compliance-operator
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-install-logging
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-configure-log-forwarder
+  namespace: compliance-operator-policies
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+placementRef:
+  name: placement-compliance-operator
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-configure-log-forwarder
     apiGroup: policy.open-cluster-management.io
     kind: Policy

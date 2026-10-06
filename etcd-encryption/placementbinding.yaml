@@ -1,0 +1,16 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-enable-etcd-encryption
+  namespace: compliance-operator-policies
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+placementRef:
+  name: placement-enable-etcd-encryption
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-enable-etcd-encryption
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy
