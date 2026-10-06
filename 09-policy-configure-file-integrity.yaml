@@ -39,6 +39,8 @@ spec:
                   nodeSelector:
                     node-role.kubernetes.io/worker: ""
                   config:
+                    name: aide-conf
+                    namespace: openshift-file-integrity
                     gracePeriod: 900
                     maxBackups: 5
     - objectDefinition:

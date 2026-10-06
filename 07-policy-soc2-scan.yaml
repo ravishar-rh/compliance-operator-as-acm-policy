@@ -38,19 +38,14 @@ spec:
                 metadata:
                   name: soc2-scan-setting
                   namespace: openshift-compliance
-                spec:
-                  schedule: "0 2 * * *"
+                roles:
+                  - worker
+                schedule: "0 2 * * *"
+                rawResultStorage:
+                  pvAccessModes:
+                    - ReadWriteOnce
                   rotation: 5
-                  roles:
-                    - worker
-                  rawResultStorage:
-                    pvAccessModes:
-                      - ReadWriteOnce
-                    size: 2Gi
-                    tolerations:
-                      - effect: NoSchedule
-                        key: node-role.kubernetes.io/master
-                        operator: Exists
+                  size: 2Gi
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
@@ -67,18 +62,17 @@ spec:
                 metadata:
                   name: soc2-compliance
                   namespace: openshift-compliance
-                spec:
-                  settingsRef:
-                    name: soc2-scan-setting
-                    kind: ScanSetting
+                settingsRef:
+                  name: soc2-scan-setting
+                  kind: ScanSetting
+                  apiGroup: compliance.openshift.io/v1alpha1
+                profiles:
+                  - name: ocp4-moderate
+                    kind: Profile
                     apiGroup: compliance.openshift.io/v1alpha1
-                  profiles:
-                    - name: ocp4-moderate
-                      kind: Profile
-                      apiGroup: compliance.openshift.io/v1alpha1
-                    - name: ocp4-moderate-node
-                      kind: Profile
-                      apiGroup: compliance.openshift.io/v1alpha1
+                  - name: ocp4-moderate-node
+                    kind: Profile
+                    apiGroup: compliance.openshift.io/v1alpha1
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
@@ -97,3 +91,24 @@ spec:
                   namespace: openshift-compliance
                 status:
                   phase: DONE
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: soc2-check-no-fail-results
+        spec:
+          remediationAction: inform
+          severity: medium
+          namespaceSelector:
+            include:
+              - openshift-compliance
+          object-templates:
+            - complianceType: mustnothave
+              objectDefinition:
+                apiVersion: compliance.openshift.io/v1alpha1
+                kind: ComplianceCheckResult
+                metadata:
+                  namespace: openshift-compliance
+                  labels:
+                    compliance.openshift.io/check-status: FAIL
+                    compliance.openshift.io/suite: soc2-compliance
