@@ -11,6 +11,29 @@ Enabling `etcd` encryption is an infrastructure-level control plane change that:
 
 To prevent accidental control plane restarts during regular compliance policy syncs, this change is decoupled into its own Argo CD `Application` (`etcd-encryption/argocd-application.yaml`) intended to be triggered during a maintenance window.
 
+## Cluster Targeting via Placement
+
+This application includes a dedicated ACM `Placement` (`placement-enable-etcd-encryption`) configured with an explicit opt-in label:
+* `vendor: OpenShift`
+* `enable-etcd-encryption: "true"`
+
+Syncing this application to the Hub will **not** affect any cluster until that cluster is explicitly opted in during a scheduled maintenance window.
+
+### Opting In a Cluster
+On the ACM Hub cluster:
+```bash
+# Label the target cluster to opt it into encryption
+oc label managedcluster <cluster-name> enable-etcd-encryption=true
+
+# Verify ACM Placement matched the cluster
+oc get placementdecisions -n compliance-operator-policies -l cluster.open-cluster-management.io/placement=placement-enable-etcd-encryption
+```
+
+To remove a cluster from future enforcement (note: does not unencrypt existing data):
+```bash
+oc label managedcluster <cluster-name> enable-etcd-encryption-
+```
+
 ## Deployment
 
 ### Option A: Via Argo CD / OpenShift GitOps (Recommended)
