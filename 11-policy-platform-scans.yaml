@@ -1,59 +1,45 @@
 ---
+# Platform-level compliance scans (ocp4-cis / ocp4-moderate).
+#
+# Bound to placement-platform-profiles, which excludes HyperShift-hosted
+# control planes. Those clusters publish only *-node Profiles, and a
+# ScanSettingBinding that references any unresolvable profile produces a
+# ComplianceSuite with an empty spec.scans -- which the API server rejects,
+# leaving the operator in a permanent reconcile error loop and creating no
+# scans at all, not even for the profiles that did resolve.
+#
+# Keeping platform profiles in their own bindings means a missing profile
+# can never take the node scans down with it.
 apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
 metadata:
-  name: policy-soc2-compliance-scan
+  name: policy-platform-compliance-scans
   namespace: compliance-operator-policies
   annotations:
     argocd.argoproj.io/sync-wave: "1"
-    policy.open-cluster-management.io/standards: SOC 2
-    policy.open-cluster-management.io/categories: "Security, Availability"
-    policy.open-cluster-management.io/controls: >-
-      CC6.1 Logical and Physical Access Controls,
-      CC7.2 System Monitoring,
-      CC8.1 Change Management
+    policy.open-cluster-management.io/standards: NIST SP 800-53, SOC 2
+    policy.open-cluster-management.io/categories: CM Configuration Management
+    policy.open-cluster-management.io/controls: CM-6 Configuration Settings
 spec:
   disabled: false
-  # No root-level remediationAction: a value here overrides every
-  # policy-template below. The status/result checks must stay inform --
-  # under enforce a mustnothave template deletes the ComplianceCheckResult
-  # objects it matches, destroying scan history.
+  # Intentionally no root remediationAction -- each template sets its own.
   dependencies:
     - apiVersion: policy.open-cluster-management.io/v1
       compliance: Compliant
       kind: Policy
-      name: policy-install-compliance-operator
+      name: policy-cis-compliance-scan
+      namespace: compliance-operator-policies
+    - apiVersion: policy.open-cluster-management.io/v1
+      compliance: Compliant
+      kind: Policy
+      name: policy-soc2-compliance-scan
       namespace: compliance-operator-policies
   policy-templates:
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
         metadata:
-          name: soc2-scan-setting
-        spec:
-          remediationAction: enforce
-          severity: high
-          object-templates:
-            - complianceType: musthave
-              objectDefinition:
-                apiVersion: compliance.openshift.io/v1alpha1
-                kind: ScanSetting
-                metadata:
-                  name: soc2-scan-setting
-                  namespace: openshift-compliance
-                roles:
-                  - worker
-                schedule: "0 2 * * *"
-                rawResultStorage:
-                  pvAccessModes:
-                    - ReadWriteOnce
-                  rotation: 5
-                  size: 2Gi
-    - objectDefinition:
-        apiVersion: policy.open-cluster-management.io/v1
-        kind: ConfigurationPolicy
-        metadata:
-          name: soc2-scan-binding
+          name: cis-platform-scan-binding
         spec:
           remediationAction: enforce
           severity: high
@@ -63,42 +49,45 @@ spec:
                 apiVersion: compliance.openshift.io/v1alpha1
                 kind: ScanSettingBinding
                 metadata:
-                  name: soc2-compliance
+                  name: cis-compliance-platform
                   namespace: openshift-compliance
                 settingsRef:
-                  name: soc2-scan-setting
+                  name: cis-scan-setting
                   kind: ScanSetting
                   apiGroup: compliance.openshift.io/v1alpha1
-                # Node profile only -- see 02-policy-cis-scan.yaml. The
-                # platform profile (ocp4-moderate) is bound separately in
-                # 11-policy-platform-scans.yaml.
                 profiles:
-                  - name: ocp4-moderate-node
+                  - name: ocp4-cis
                     kind: Profile
                     apiGroup: compliance.openshift.io/v1alpha1
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
         metadata:
-          name: soc2-suite-status
+          name: soc2-platform-scan-binding
         spec:
-          remediationAction: inform
+          remediationAction: enforce
           severity: high
           object-templates:
             - complianceType: musthave
               objectDefinition:
                 apiVersion: compliance.openshift.io/v1alpha1
-                kind: ComplianceSuite
+                kind: ScanSettingBinding
                 metadata:
-                  name: soc2-compliance
+                  name: soc2-compliance-platform
                   namespace: openshift-compliance
-                status:
-                  phase: DONE
+                settingsRef:
+                  name: soc2-scan-setting
+                  kind: ScanSetting
+                  apiGroup: compliance.openshift.io/v1alpha1
+                profiles:
+                  - name: ocp4-moderate
+                    kind: Profile
+                    apiGroup: compliance.openshift.io/v1alpha1
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
         metadata:
-          name: soc2-check-no-fail-results
+          name: cis-platform-no-fail-results
         spec:
           remediationAction: inform
           severity: medium
@@ -114,4 +103,25 @@ spec:
                   namespace: openshift-compliance
                   labels:
                     compliance.openshift.io/check-status: FAIL
-                    compliance.openshift.io/suite: soc2-compliance
+                    compliance.openshift.io/suite: cis-compliance-platform
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: soc2-platform-no-fail-results
+        spec:
+          remediationAction: inform
+          severity: medium
+          namespaceSelector:
+            include:
+              - openshift-compliance
+          object-templates:
+            - complianceType: mustnothave
+              objectDefinition:
+                apiVersion: compliance.openshift.io/v1alpha1
+                kind: ComplianceCheckResult
+                metadata:
+                  namespace: openshift-compliance
+                  labels:
+                    compliance.openshift.io/check-status: FAIL
+                    compliance.openshift.io/suite: soc2-compliance-platform

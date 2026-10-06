@@ -15,6 +15,7 @@ spec:
     - policy-install-compliance-operator
     - policy-cis-compliance-scan
     - policy-soc2-compliance-scan
+    - policy-platform-compliance-scans
     - policy-check-compliance-results
     - policy-install-fio
     - policy-configure-file-integrity

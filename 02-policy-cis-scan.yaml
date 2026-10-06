@@ -60,10 +60,10 @@ spec:
                   name: cis-scan-setting
                   kind: ScanSetting
                   apiGroup: compliance.openshift.io/v1alpha1
+                # Node profile only -- resolves on every cluster including
+                # HyperShift/ROSA HCP. The platform profile (ocp4-cis) is
+                # bound separately in 11-policy-platform-scans.yaml.
                 profiles:
-                  - name: ocp4-cis
-                    kind: Profile
-                    apiGroup: compliance.openshift.io/v1alpha1
                   - name: ocp4-cis-node
                     kind: Profile
                     apiGroup: compliance.openshift.io/v1alpha1

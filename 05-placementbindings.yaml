@@ -110,3 +110,20 @@ subjects:
   - name: policy-check-fio-results
     apiGroup: policy.open-cluster-management.io
     kind: Policy
+---
+# Platform scans bind to the restricted placement, not the fleet-wide one.
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-platform-compliance-scans
+  namespace: compliance-operator-policies
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+placementRef:
+  name: placement-platform-profiles
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+subjects:
+  - name: policy-platform-compliance-scans
+    apiGroup: policy.open-cluster-management.io
+    kind: Policy

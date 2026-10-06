@@ -42,15 +42,19 @@ The Compliance Operator's NIST Moderate profile includes the rule `ocp4-file-int
 .
 ├── 00-namespace.yaml                          # Hub namespace for policy resources
 ├── 01-policy-install-compliance-operator.yaml  # Install operator (NS, OperatorGroup, Subscription)
-├── 02-policy-cis-scan.yaml                     # CIS benchmark scan configuration
+├── 02-policy-cis-scan.yaml                     # CIS node scan (all clusters)
 ├── 03-policy-check-compliance-results.yaml     # Inform-only policy to surface failures
-├── 04-placement.yaml                           # Placement targeting OpenShift clusters
-├── 05-placementbindings.yaml                   # Binds policies to placement
+├── 04-placement.yaml                           # Two placements: fleet-wide and platform-capable
+├── 04a-managedclustersetbinding.yaml           # Binds the default ManagedClusterSet
+├── 05-placementbindings.yaml                   # Binds policies to placements
 ├── 06-policyset.yaml                           # Groups all policies for dashboard view
-├── 07-policy-soc2-scan.yaml                    # SOC 2 / NIST Moderate scan configuration
+├── 07-policy-soc2-scan.yaml                    # SOC 2 / NIST Moderate node scan (all clusters)
 ├── 08-policy-install-file-integrity-operator.yaml  # Install FIO (NS, OperatorGroup, Subscription)
-├── 09-policy-configure-file-integrity.yaml     # FileIntegrity CRs + custom AIDE config
+├── 09-policy-configure-file-integrity.yaml     # FileIntegrity CR
 ├── 10-policy-check-file-integrity-results.yaml # Inform-only policy to surface integrity failures
+├── 11-policy-platform-scans.yaml               # Platform scans (non-HyperShift clusters only)
+├── argocd-rbac.yaml                            # Argo CD RBAC for managing ACM policies
+├── argocd-clusterset-bind-rbac.yaml            # Argo CD RBAC for clusterset binding
 ├── kustomization.yaml                          # Kustomize overlay for deployment
 └── README.md
 ```
@@ -63,11 +67,27 @@ Policies are ordered using `spec.dependencies` to ensure correct sequencing:
 policy-install-compliance-operator
     ├── policy-cis-compliance-scan            (waits for operator install)
     ├── policy-soc2-compliance-scan           (waits for operator install)
-    └── policy-check-compliance-results      (waits for CIS scan)
+    ├── policy-check-compliance-results       (waits for CIS scan)
+    └── policy-platform-compliance-scans      (waits for both scan policies --
+                                               reuses their ScanSettings;
+                                               non-HyperShift clusters only)
 
 policy-install-fio
-    └── policy-configure-file-integrity      (waits for FIO install)
-        └── policy-check-fio-results  (waits for FIO configuration)
+    └── policy-configure-file-integrity       (waits for FIO install)
+        └── policy-check-fio-results          (waits for FIO configuration)
+```
+
+### remediationAction: root overrides children
+
+A `remediationAction` set at the **root** of a `Policy` overrides the value on every `ConfigurationPolicy` in `policy-templates`. Templates that must stay `inform` are therefore unsafe inside a Policy whose root says `enforce`.
+
+This bites hardest with `complianceType: mustnothave`. Under `inform` it reports matching objects; under `enforce` it **deletes** them. A check written as "there should be no failing ComplianceCheckResults", if silently promoted to `enforce`, deletes your scan findings on every evaluation — the Compliance Operator recreates them, so it loops quietly while destroying audit history.
+
+[07-policy-soc2-scan.yaml](07-policy-soc2-scan.yaml) and [11-policy-platform-scans.yaml](11-policy-platform-scans.yaml) therefore omit the root `remediationAction` entirely and let each template declare its own. Verify what actually landed on a managed cluster:
+
+```bash
+oc get configurationpolicy -n <cluster-name> \
+  -o custom-columns='NAME:.metadata.name,REMEDIATION:.spec.remediationAction'
 ```
 
 ## Deployment
@@ -285,6 +305,44 @@ Common profiles for OpenShift 4.x:
 | `ocp4-nerc-cip` | NERC-CIP (platform) | CC6.1, CC7.1 |
 | `ocp4-nerc-cip-node` | NERC-CIP (node) | CC6.1, CC7.1 |
 
+### Platform Profiles Are Absent on HyperShift / ROSA HCP
+
+> This is the single most important operational detail in this repo.
+
+On a cluster with a **HyperShift-hosted control plane** (ROSA HCP, ARO HCP, self-hosted HyperShift), the Compliance Operator publishes only the `*-node` profiles. The platform profiles — `ocp4-cis`, `ocp4-moderate`, `ocp4-high`, `ocp4-pci-dss` — simply do not exist, because they assess API server, etcd and OAuth configuration that the provider manages and you cannot remediate.
+
+Verify on any cluster:
+
+```bash
+oc get profiles.compliance -n openshift-compliance --no-headers | awk '{print $1}' | grep -E '^ocp4-(cis|moderate)$'
+```
+
+Self-managed clusters return both names. HyperShift-hosted clusters return nothing.
+
+**Why this matters so much:** a `ScanSettingBinding` fails *as a whole* if any profile it references is unresolvable. It does not partially resolve. The operator then emits a `ComplianceSuite` with an empty `spec.scans`, which the API server rejects:
+
+```
+ComplianceSuite "soc2-compliance" is invalid: spec.scans: Required value
+```
+
+The controller retries this forever, and the cluster ends up with **zero** ComplianceScans — not even for the node profile that *was* available. No scans means no result PVCs, no suite ever reaching `DONE`, and every downstream inform policy stuck NonCompliant. In Argo CD the whole Application shows `Degraded` while reporting `Synced`.
+
+**How this repo handles it:**
+
+| Policy | Profiles | Placement | Clusters |
+|---|---|---|---|
+| [02-policy-cis-scan.yaml](02-policy-cis-scan.yaml) | `ocp4-cis-node` | `placement-compliance-operator` | All |
+| [07-policy-soc2-scan.yaml](07-policy-soc2-scan.yaml) | `ocp4-moderate-node` | `placement-compliance-operator` | All |
+| [11-policy-platform-scans.yaml](11-policy-platform-scans.yaml) | `ocp4-cis`, `ocp4-moderate` | `placement-platform-profiles` | Non-HyperShift only |
+
+`placement-platform-profiles` in [04-placement.yaml](04-placement.yaml) selects `vendor=OpenShift` and excludes `cloud=Amazon`. Adjust that predicate to match how your fleet labels HyperShift-hosted clusters — `cloud` is a proxy, not a true control-plane-topology signal, so a self-managed OpenShift cluster on AWS would be wrongly excluded. If that applies to you, set an explicit label instead:
+
+```bash
+oc label managedcluster <name> compliance.openshift.io/platform-profiles=enabled
+```
+
+Keeping each profile in its own binding also means a future missing profile breaks only that binding rather than taking the node scans down with it.
+
 ### SOC 2 Compliance Scanning
 
 There is no direct SOC 2 profile in the Compliance Operator. SOC 2 is an audit framework built around five Trust Service Criteria (TSC), not a technical benchmark. The recommended approach is to scan with **NIST SP 800-53 Moderate** (`ocp4-moderate` / `ocp4-moderate-node`), which provides the strongest coverage of SOC 2 controls:
@@ -448,34 +506,40 @@ spec:
 
 The policies in this repo create a `FileIntegrity` CR for worker nodes (`worker-fileintegrity`), which covers all nodes in the fleet since both the ROSA HCP hub and bare metal managed clusters have worker-only topologies.
 
-### Custom AIDE Configuration
+### AIDE Configuration: Use the Operator Default
 
-The `09-policy-configure-file-integrity.yaml` includes a custom `aide.conf` ConfigMap that monitors:
+[09-policy-configure-file-integrity.yaml](09-policy-configure-file-integrity.yaml) deliberately omits `spec.config.name` / `spec.config.namespace`, so AIDE runs with the config shipped in the operator image.
 
-| Path | What's Protected |
-|------|-----------------|
-| `/hostroot/bin`, `/sbin`, `/usr/bin`, `/usr/sbin` | System binaries |
-| `/hostroot/etc/kubernetes` | Kubernetes configuration (kubeconfig, manifests, PKI) |
-| `/hostroot/etc/cni` | Container network configuration |
-| `/hostroot/etc/ssh/sshd_config` | SSH daemon configuration |
-| `/hostroot/etc/passwd`, `shadow`, `group`, `gshadow` | User and group databases |
-| `/hostroot/etc/sudoers`, `sudoers.d` | Privilege escalation configuration |
-| `/hostroot/etc/systemd` | Systemd unit files |
+An earlier revision of this repo supplied a hand-written `aide.conf` via ConfigMap. It put every AIDE pod into `Init:CrashLoopBackOff` and left the fleet with **no** file integrity monitoring for several days before it was caught. Writing a correct `aide.conf` for RHCOS is harder than it looks:
 
-Each path is checked with the attribute set `p+i+n+u+g+s+b+acl+xattrs+sha512`:
+- `verbose=` was deprecated in AIDE 0.17 and removed in 0.18; a config carrying it fails to parse outright
+- AIDE's own `aide.db.gz` and `aide.log` live under `/hostroot/etc/kubernetes`, so monitoring that directory without `!` exclusions for them guarantees a permanent self-triggered integrity failure
+- the kubelet rewrites `/hostroot/etc/kubernetes/static-pod-resources` constantly and must be excluded
+- paths such as `/hostroot/etc/ssh/ssh_config` do not exist on current RHCOS, which uses `ssh_config.d/`
 
-| Attribute | Meaning |
-|-----------|---------|
-| `p` | Permissions |
-| `i` | Inode number |
-| `n` | Number of hard links |
-| `u` | User ownership |
-| `g` | Group ownership |
-| `s` | File size |
-| `b` | Block count |
-| `acl` | POSIX ACLs |
-| `xattrs` | Extended attributes (SELinux labels) |
-| `sha512` | SHA-512 hash of file contents |
+The operator's bundled config already covers system binaries, `/etc/kubernetes`, SSH config, the user and group databases, sudoers and systemd units — the same ground the custom config attempted — with the exclusions correct and tested against RHCOS.
+
+If you genuinely need to tailor it, derive from the operator's working config rather than writing one from scratch:
+
+```bash
+# Pull the running config off a node
+oc get cm -n openshift-file-integrity | grep worker-fileintegrity
+oc get cm worker-fileintegrity -n openshift-file-integrity -o jsonpath='{.data.aide\.conf}' > aide.conf
+```
+
+Edit that file, publish it as a ConfigMap, then reference it:
+
+```yaml
+spec:
+  config:
+    name: my-aide-conf
+    namespace: openshift-file-integrity
+    key: aide.conf          # required when pointing at your own ConfigMap
+    gracePeriod: 900
+    maxBackups: 5
+```
+
+Roll it out to one cluster and confirm the AIDE pods reach `Running` before letting the policy reach the fleet.
 
 ### Checking File Integrity Status
 
@@ -519,30 +583,38 @@ This surfaces file integrity violations at the fleet level alongside compliance 
 This repo assumes the following topology:
 
 ```
-┌──────────────────────────────────────┐
-│  Hub Cluster (ROSA HCP on AWS)       │
-│  ├── RHACM / Governance              │
-│  ├── Policy resources (this repo)    │
-│  ├── Compliance Operator  ◄── policy │
-│  └── File Integrity Operator ◄─ policy│
-│      (worker nodes only)             │
-└──────────────┬───────────────────────┘
+┌────────────────────────────────────────────┐
+│  Hub Cluster — local-cluster               │
+│  ROSA HCP on AWS   (cloud=Amazon)          │
+│  ├── RHACM / Governance                    │
+│  ├── Policy resources (this repo)          │
+│  ├── Compliance Operator  ◄──── policy     │
+│  │     node profiles ONLY                  │
+│  │     (hosted control plane → no          │
+│  │      ocp4-cis / ocp4-moderate)          │
+│  └── File Integrity Operator ◄── policy    │
+└──────────────┬─────────────────────────────┘
                │ ACM Governance
-    ┌──────────┴──────────┐
-    ▼                     ▼
-┌──────────────┐  ┌──────────────┐
-│ Managed       │  │ Managed       │
-│ Cluster       │  │ Cluster       │
-│ (Bare Metal)  │  │ (Bare Metal)  │
-│ worker nodes  │  │ worker nodes  │
-└──────────────┘  └──────────────┘
+    ┌──────────┼──────────┐
+    ▼          ▼          ▼
+┌─────────┐ ┌─────────┐ ┌───────────┐
+│  m-da   │ │  m-ny   │ │ m-ty-ove  │
+│ BareMtl │ │ BareMtl │ │  BareMtl  │
+│ node +  │ │ node +  │ │  node +   │
+│ platform│ │ platform│ │  platform │
+└─────────┘ └─────────┘ └───────────┘
 ```
 
-- **Hub cluster (ROSA HCP)**: Runs RHACM and is also a target for the policies via `local-cluster`. The Compliance Operator and FIO are deployed on the hub itself.
-- **Managed clusters (bare metal)**: Worker-node-only clusters. Compliance scans and file integrity monitoring run on all worker nodes.
-- **All clusters** have worker nodes only (no schedulable masters), so scan settings and FIO target the `worker` role exclusively.
+- **Hub cluster (ROSA HCP, `cloud=Amazon`)**: Runs RHACM and is itself a policy target via `local-cluster`. Both operators are deployed here. Because the control plane is HyperShift-hosted, only `*-node` profiles are available — it receives node scans but is excluded from `placement-platform-profiles`.
+- **Managed clusters (bare metal, `cloud=BareMetal`)**: Full coverage — both node and platform profiles resolve, so these get the complete CIS and NIST Moderate assessment.
+- **All clusters** are worker-node-only, so ScanSettings and the `FileIntegrity` CR target the `worker` role exclusively.
 
-The Placement targets all clusters labeled `vendor: OpenShift`, which includes `local-cluster` (the hub) automatically.
+Two Placements, both scoped to `vendor=OpenShift`:
+
+| Placement | Predicate | Selects | Used by |
+|---|---|---|---|
+| `placement-compliance-operator` | `vendor=OpenShift` | All 4 clusters | Operator installs, node scans, FIO, result checks |
+| `placement-platform-profiles` | `vendor=OpenShift`, `cloud NotIn [Amazon]` | 3 bare metal | Platform scans only |
 
 A `ManagedClusterSetBinding` for the `default` cluster set is required in `compliance-operator-policies`. Without it, Placement selects zero clusters and policies show **No clusters match this policy**.
 
@@ -595,6 +667,56 @@ spec:
 ## Troubleshooting
 
 All steps use **`oc` only**. Run them on the **ACM hub** unless a step says to use a managed cluster.
+
+### Known failure modes
+
+Two real failures hit this repo in production. Both are fixed in the manifests; this is what they looked like so they're recognisable if they recur.
+
+---
+
+**Argo CD shows `Synced` + `Degraded`, no scans exist, no PVCs**
+
+Symptom chain:
+
+```
+oc get compliancescans -n openshift-compliance     # returns nothing at all
+oc get pvc -n openshift-compliance                 # no PVCs
+oc logs -n openshift-compliance deployment/compliance-operator | grep error
+#   ComplianceSuite "soc2-compliance" is invalid: spec.scans: Required value
+```
+
+Cause: the `ScanSettingBinding` referenced a profile that does not exist on that cluster — on HyperShift/ROSA HCP, the platform profiles are absent. A binding fails entirely rather than partially resolving, so the operator emits a `ComplianceSuite` with empty `spec.scans`, the API server rejects it, and the controller error-loops every ~17 minutes. Zero scans means zero result PVCs and a suite that never reaches `DONE`, so every inform policy downstream sits NonCompliant and Argo CD reports the Application `Degraded` even though the sync itself succeeded.
+
+Confirm, then fix by moving platform profiles to a placement that excludes HyperShift clusters:
+
+```bash
+oc get profiles.compliance -n openshift-compliance --no-headers | awk '{print $1}' | grep -E '^ocp4-(cis|moderate)$'
+oc get profilebundles.compliance.openshift.io -n openshift-compliance   # should be VALID
+```
+
+Note Argo CD maps ACM `NonCompliant → Degraded`. A Degraded Application whose resources are all `Synced` usually means a policy is correctly reporting a genuine finding, not that deployment failed. Check *which* resource is Degraded before assuming a sync problem:
+
+```bash
+oc get apps <app> -n openshift-gitops -o jsonpath='{range .status.resources[*]}{.kind}{"/"}{.name}{" health="}{.health.status}{" msg="}{.health.message}{"\n"}{end}'
+```
+
+---
+
+**All `aide-*` pods in `Init:CrashLoopBackOff`**
+
+```
+aide-worker-fileintegrity-2np5x   0/1   Init:CrashLoopBackOff   1187 (110s ago)   4d5h
+```
+
+Cause: a custom `aide.conf` the AIDE binary rejects. A restart count in the hundreds with the operator pod itself healthy means the config is bad, not the environment — the init container dies instantly on every attempt. Note this fails *silently* from a governance perspective: the FIO install policy stays Compliant because the operator is running, and only the inform results policy flags it.
+
+```bash
+oc get pods -n openshift-file-integrity
+oc describe pod <aide-pod> -n openshift-file-integrity | sed -n '/Init Containers:/,/Conditions:/p'
+oc logs <aide-pod> -n openshift-file-integrity --all-containers --previous --tail=60
+```
+
+Fix: drop `spec.config.name` / `spec.config.namespace` from the `FileIntegrity` CR and use the operator's bundled config. See [AIDE Configuration: Use the Operator Default](#aide-configuration-use-the-operator-default).
 
 ### GitOps Application resource name
 

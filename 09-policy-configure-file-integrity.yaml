@@ -38,59 +38,12 @@ spec:
                 spec:
                   nodeSelector:
                     node-role.kubernetes.io/worker: ""
+                  # No config.name/config.namespace: use the AIDE config
+                  # shipped with the operator. It already covers system
+                  # binaries, /etc/kubernetes, SSH, the user/group databases,
+                  # sudoers and systemd units, and -- critically -- excludes
+                  # AIDE's own database and log plus the kubelet's churning
+                  # state directories, which a hand-written config omits.
                   config:
-                    name: aide-conf
-                    namespace: openshift-file-integrity
                     gracePeriod: 900
                     maxBackups: 5
-    - objectDefinition:
-        apiVersion: policy.open-cluster-management.io/v1
-        kind: ConfigurationPolicy
-        metadata:
-          name: fio-custom-aide-config
-        spec:
-          remediationAction: enforce
-          severity: medium
-          object-templates:
-            - complianceType: musthave
-              objectDefinition:
-                apiVersion: v1
-                kind: ConfigMap
-                metadata:
-                  name: aide-conf
-                  namespace: openshift-file-integrity
-                data:
-                  aide.conf: |
-                    @@define DBDIR /hostroot/etc/kubernetes
-                    @@define LOGDIR /hostroot/etc/kubernetes
-                    database=file:@@{DBDIR}/aide.db.gz
-                    database_out=file:@@{DBDIR}/aide.db.new.gz
-                    gzip_dbout=yes
-                    verbose=5
-                    report_url=file:@@{LOGDIR}/aide.log
-                    report_url=stdout
-
-                    # Critical system binaries
-                    /hostroot/bin    p+i+n+u+g+s+b+acl+xattrs+sha512
-                    /hostroot/sbin   p+i+n+u+g+s+b+acl+xattrs+sha512
-                    /hostroot/usr/bin   p+i+n+u+g+s+b+acl+xattrs+sha512
-                    /hostroot/usr/sbin  p+i+n+u+g+s+b+acl+xattrs+sha512
-
-                    # Kubernetes and OpenShift configuration
-                    /hostroot/etc/kubernetes   p+i+n+u+g+s+b+acl+xattrs+sha512
-                    /hostroot/etc/cni   p+i+n+u+g+s+b+acl+xattrs+sha512
-
-                    # SSH configuration
-                    /hostroot/etc/ssh/sshd_config   p+i+n+u+g+s+b+acl+xattrs+sha512
-                    /hostroot/etc/ssh/ssh_config     p+i+n+u+g+s+b+acl+xattrs+sha512
-
-                    # Critical system configuration
-                    /hostroot/etc/passwd   p+i+n+u+g+s+b+acl+xattrs+sha512
-                    /hostroot/etc/shadow   p+i+n+u+g+s+b+acl+xattrs+sha512
-                    /hostroot/etc/group    p+i+n+u+g+s+b+acl+xattrs+sha512
-                    /hostroot/etc/gshadow  p+i+n+u+g+s+b+acl+xattrs+sha512
-                    /hostroot/etc/sudoers  p+i+n+u+g+s+b+acl+xattrs+sha512
-                    /hostroot/etc/sudoers.d  p+i+n+u+g+s+b+acl+xattrs+sha512
-
-                    # Systemd units
-                    /hostroot/etc/systemd   p+i+n+u+g+s+b+acl+xattrs+sha512
