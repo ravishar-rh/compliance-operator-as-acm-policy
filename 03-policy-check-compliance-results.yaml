@@ -58,3 +58,42 @@ spec:
                   labels:
                     compliance.openshift.io/check-status: FAIL
                     compliance.openshift.io/suite: cis-compliance
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: soc2-suite-status
+        spec:
+          remediationAction: inform
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: compliance.openshift.io/v1alpha1
+                kind: ComplianceSuite
+                metadata:
+                  name: soc2-compliance
+                  namespace: openshift-compliance
+                status:
+                  phase: DONE
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: soc2-check-no-fail-results
+        spec:
+          remediationAction: inform
+          severity: medium
+          namespaceSelector:
+            include:
+              - openshift-compliance
+          object-templates:
+            - complianceType: mustnothave
+              objectDefinition:
+                apiVersion: compliance.openshift.io/v1alpha1
+                kind: ComplianceCheckResult
+                metadata:
+                  namespace: openshift-compliance
+                  labels:
+                    compliance.openshift.io/check-status: FAIL
+                    compliance.openshift.io/suite: soc2-compliance

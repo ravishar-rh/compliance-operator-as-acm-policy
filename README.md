@@ -77,6 +77,26 @@ policy-install-fio
         └── policy-check-fio-results          (waits for FIO configuration)
 ```
 
+### Never depend on a policy that contains checks
+
+Config policies and check policies are kept strictly separate, and only config policies appear in a `dependencies` block.
+
+A check policy is *designed* to report NonCompliant — that's its job. A config policy should sit at Compliant once its objects exist. ACM holds a policy in **Pending** until its dependencies report Compliant, so depending on a check policy creates a deadlock that only resolves when there is nothing to report:
+
+> real scan findings → check template NonCompliant → parent policy NonCompliant →
+> dependent policy Pending forever
+
+This repo hit exactly that. `policy-soc2-compliance-scan` originally carried both its ScanSetting/Binding *and* its suite-status and failed-result checks, while `policy-platform-compliance-scans` depended on it. The first genuine finding pinned the platform scans to Pending across the entire fleet. The checks now live in [03-policy-check-compliance-results.yaml](03-policy-check-compliance-results.yaml), leaving the scan policies as pure configuration.
+
+| Policy | Contains | Steady state |
+|---|---|---|
+| `policy-cis-compliance-scan` | ScanSetting + Binding | Compliant |
+| `policy-soc2-compliance-scan` | ScanSetting + Binding | Compliant |
+| `policy-platform-compliance-scans` | Platform bindings (+ its own checks; nothing depends on it) | Varies |
+| `policy-check-compliance-results` | CIS and SOC 2 suite status + failed results | NonCompliant when findings exist |
+
+If you add a policy, ask which of the two it is. Mixing them is what broke this.
+
 ### remediationAction: root overrides children
 
 A `remediationAction` set at the **root** of a `Policy` overrides the value on every `ConfigurationPolicy` in `policy-templates`. Templates that must stay `inform` are therefore unsafe inside a Policy whose root says `enforce`.
